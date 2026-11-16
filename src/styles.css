@@ -1,0 +1,14 @@
+/* Global basics only. The C1 theme tokens (desk, paper, ink, fonts) arrive
+   with milestone 6; keep component styles in their components. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  color: #3a2e22;
+  background: #f4ecd9;
+  -webkit-tap-highlight-color: transparent;
+}

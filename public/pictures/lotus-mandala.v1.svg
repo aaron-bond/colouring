@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-310 -310 620 620" width="620" height="620">
+  <defs>
+    <path id="outer" d="M0,-122 C48,-170 48,-232 0,-272 C-48,-232 -48,-170 0,-122Z"/>
+    <path id="inner" d="M0,-50 C26,-74 26,-98 0,-114 C-26,-98 -26,-74 0,-50Z"/>
+    <circle id="dot" cy="-205" r="10"/>
+  </defs>
+  <g fill="none" stroke="#3A2E22" stroke-width="3.4" stroke-linejoin="round">
+    <circle r="284"/><circle r="118"/><circle r="42"/><circle r="22"/>
+    <use href="#outer"/><use href="#outer" transform="rotate(30)"/><use href="#outer" transform="rotate(60)"/>
+    <use href="#outer" transform="rotate(90)"/><use href="#outer" transform="rotate(120)"/><use href="#outer" transform="rotate(150)"/>
+    <use href="#outer" transform="rotate(180)"/><use href="#outer" transform="rotate(210)"/><use href="#outer" transform="rotate(240)"/>
+    <use href="#outer" transform="rotate(270)"/><use href="#outer" transform="rotate(300)"/><use href="#outer" transform="rotate(330)"/>
+    <use href="#inner" transform="rotate(15)"/><use href="#inner" transform="rotate(45)"/><use href="#inner" transform="rotate(75)"/>
+    <use href="#inner" transform="rotate(105)"/><use href="#inner" transform="rotate(135)"/><use href="#inner" transform="rotate(165)"/>
+    <use href="#inner" transform="rotate(195)"/><use href="#inner" transform="rotate(225)"/><use href="#inner" transform="rotate(255)"/>
+    <use href="#inner" transform="rotate(285)"/><use href="#inner" transform="rotate(315)"/><use href="#inner" transform="rotate(345)"/>
+    <use href="#dot" transform="rotate(15)"/><use href="#dot" transform="rotate(45)"/><use href="#dot" transform="rotate(75)"/>
+    <use href="#dot" transform="rotate(105)"/><use href="#dot" transform="rotate(135)"/><use href="#dot" transform="rotate(165)"/>
+    <use href="#dot" transform="rotate(195)"/><use href="#dot" transform="rotate(225)"/><use href="#dot" transform="rotate(255)"/>
+    <use href="#dot" transform="rotate(285)"/><use href="#dot" transform="rotate(315)"/><use href="#dot" transform="rotate(345)"/>
+  </g>
+</svg>

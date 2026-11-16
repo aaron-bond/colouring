@@ -1,0 +1,102 @@
+<div
+  class="stage"
+  #stage
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerUp($event)"
+  (wheel)="onWheel($event)"
+  (contextmenu)="$event.preventDefault()"
+>
+  <div class="page" #page [class.page--will-change]="willChange()">
+    <div class="paper"></div>
+    <canvas #colourCanvas class="layer"></canvas>
+    <canvas #wetCanvas class="layer" [style.opacity]="pencilOpacity"></canvas>
+    <img class="layer line-art" src="pictures/lotus-mandala.v1.svg" alt="" draggable="false" />
+  </div>
+</div>
+
+<section class="panel" [class.panel--closed]="!panelOpen()" aria-label="Spike controls">
+  <button type="button" class="toggle" (click)="panelOpen.set(!panelOpen())">
+    {{ panelOpen() ? 'Hide' : 'Controls' }}
+  </button>
+  @if (panelOpen()) {
+    <div class="row">
+      <button type="button" [class.on]="tool() === 'pencil'" (click)="tool.set('pencil')">Pencil</button>
+      <button type="button" [class.on]="tool() === 'eraser'" (click)="tool.set('eraser')">Eraser</button>
+    </div>
+    <div class="row" role="group" aria-label="Size">
+      @for (n of [0, 1, 2, 3, 4]; track n) {
+        <button type="button" class="size" [class.on]="sizeIndex() === n" (click)="sizeIndex.set(n)">
+          {{ n + 1 }}
+        </button>
+      }
+    </div>
+    <div class="row" role="group" aria-label="Colour">
+      @for (c of colours; track c) {
+        <button
+          type="button"
+          class="swatch"
+          [class.on]="colour() === c"
+          [style.background]="c"
+          [attr.aria-label]="c"
+          (click)="colour.set(c)"
+        ></button>
+      }
+    </div>
+    <div class="row">
+      <button type="button" (click)="undo()">Undo</button>
+      <button type="button" (click)="redo()">Redo</button>
+      <button type="button" (click)="clear()">Clear</button>
+      <button type="button" (click)="fit()">Fit</button>
+    </div>
+    <div class="row">
+      <button type="button" (click)="stressTest()">Stress ×50</button>
+      <button type="button" (click)="encodePng()">Encode PNG</button>
+    </div>
+    <label class="row"
+      >Document
+      <select (change)="changeDocSize($any($event.target).value)">
+        @for (s of docSizes; track s) {
+          <option [value]="s" [selected]="s === docSize()">{{ s }}²</option>
+        }
+      </select>
+    </label>
+    <label class="row check"
+      ><input type="checkbox" [checked]="fingerDraws()" (change)="fingerDraws.set(!fingerDraws())" /> Fingers draw
+      in pen mode</label
+    >
+    <label class="row check"
+      ><input type="checkbox" [checked]="willChange()" (change)="willChange.set(!willChange())" /> will-change:
+      transform</label
+    >
+    <a routerLink="/">← Back</a>
+  }
+</section>
+
+@if (hud(); as h) {
+  <dl class="hud">
+    <dt>pen mode</dt>
+    <dd>{{ penMode() ? 'on' : 'off' }}</dd>
+    <dt>pointer</dt>
+    <dd>{{ h.pointer }} · p={{ h.pressure }}</dd>
+    <dt>input</dt>
+    <dd>{{ h.inputHz }} · {{ h.coalesced }}/event</dd>
+    <dt>draw/event</dt>
+    <dd>{{ h.drawMs }} ms</dd>
+    <dt>frame</dt>
+    <dd>{{ h.frameMs }} ms avg · {{ h.frameMax }} ms max</dd>
+    <dt>commit</dt>
+    <dd>{{ h.commitMs }} ms</dd>
+    <dt>zoom</dt>
+    <dd>{{ h.zoom }}</dd>
+    <dt>undo</dt>
+    <dd>{{ h.undo }}</dd>
+    <dt>JS heap</dt>
+    <dd>{{ h.heap }}</dd>
+    <dt>encode</dt>
+    <dd>{{ h.encode }}</dd>
+    <dt>stress</dt>
+    <dd>{{ h.stress }}</dd>
+  </dl>
+}
