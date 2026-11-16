@@ -9,6 +9,11 @@ components and signals).
 throwaway drawing page at `#/spike` used to check drawing, zoom and
 memory on the target tablet before building the real screens.
 
+## Docs
+
+- [docs/TECHNICAL-DESIGN.md](docs/TECHNICAL-DESIGN.md): architecture, scope, milestones, decisions
+- [docs/CONTEXT.md](docs/CONTEXT.md): product brief, principles, UX and theme direction
+
 ## Commands
 
 | Command | What it does |
