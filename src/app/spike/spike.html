@@ -54,6 +54,7 @@
       <button type="button" (click)="stressTest()">Stress ×50</button>
       <button type="button" (click)="encodePng()">Encode PNG</button>
       <button type="button" (click)="checkPaint()">Check paint</button>
+      <button type="button" (click)="clearLog()">Clear log</button>
     </div>
     <label class="row"
       >Document
@@ -80,7 +81,8 @@
 </section>
 
 @if (hud(); as h) {
-  <dl class="hud">
+  <dl class="hud" role="button" tabindex="0" aria-label="Copy diagnostics report" (click)="copyReport()" (keydown.enter)="copyReport()">
+    <dt class="hud-copy">{{ copyStatus() }}</dt>
     <dt>pen mode</dt>
     <dd>{{ penMode() ? 'on' : 'off' }}</dd>
     <dt>pointer</dt>

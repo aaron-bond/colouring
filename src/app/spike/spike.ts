@@ -76,6 +76,13 @@ export class Spike {
   protected readonly panelOpen = signal(true);
   protected readonly hud = signal<Hud | null>(null);
   protected readonly pencilOpacity = PENCIL_OPACITY;
+  protected readonly copyStatus = signal('tap to copy report');
+
+  // Diagnostics over time, for "tap the readout to copy": an event log and
+  // a readout snapshot every 5 s, both capped.
+  private readonly t0 = performance.now();
+  private readonly events: string[] = [];
+  private readonly snapshots: string[] = [];
 
   private colourEl!: HTMLCanvasElement;
   private wetEl!: HTMLCanvasElement;
@@ -92,6 +99,7 @@ export class Spike {
   private mode: Mode = 'idle';
   private strokeId = -1;
   private strokeTool: Tool = 'pencil';
+  private stressing = false;
   private lastDoc: Point = { x: 0, y: 0 };
   private carry = 0; // distance travelled since the last dab
   private bbox: Rect | null = null;
@@ -141,6 +149,7 @@ export class Spike {
       let last = performance.now();
       const frame = (now: number) => {
         this.stats.frames.push(now - last);
+        if (now - last > 250 && !document.hidden) this.logEvent(`long frame ${Math.round(now - last)} ms`);
         if (this.stats.frames.length > 120) this.stats.frames.shift();
         last = now;
         if (this.viewDirty) this.applyView();
@@ -148,6 +157,9 @@ export class Spike {
       };
       raf = requestAnimationFrame(frame);
       const hudTimer = setInterval(() => this.updateHud(), 250);
+      const snapshotTimer = setInterval(() => this.snapshot(), 5000);
+      const onVisibility = () => this.logEvent(document.hidden ? 'page hidden' : 'page visible');
+      document.addEventListener('visibilitychange', onVisibility);
 
       destroyRef.onDestroy(() => {
         resize.disconnect();
@@ -156,6 +168,8 @@ export class Spike {
         window.removeEventListener('keyup', onKey);
         cancelAnimationFrame(raf);
         clearInterval(hudTimer);
+        clearInterval(snapshotTimer);
+        document.removeEventListener('visibilitychange', onVisibility);
         this.worker?.terminate();
       });
     });
@@ -175,6 +189,7 @@ export class Spike {
     this.stats.lost = 0;
     this.stats.restored = 0;
     this.stats.paint = '-';
+    this.logEvent(`document ${longSide}² · ${this.cpuCanvas() ? 'CPU' : 'GPU'} canvas`);
     this.history = new TileHistory(canvasSurface(this.colourCtx), UNDO_BUDGET_BYTES);
     const page = this.pageRef().nativeElement;
     page.style.width = `${longSide}px`;
@@ -191,8 +206,15 @@ export class Spike {
     canvas.height = size;
     canvas.style.width = `${size}px`;
     canvas.style.height = `${size}px`;
-    canvas.addEventListener('contextlost', () => this.stats.lost++);
-    canvas.addEventListener('contextrestored', () => this.stats.restored++);
+    const name = old === this.colourEl || old === this.colourRef().nativeElement ? 'colour' : 'wet';
+    canvas.addEventListener('contextlost', () => {
+      this.stats.lost++;
+      this.logEvent(`CONTEXT LOST (${name} canvas)`);
+    });
+    canvas.addEventListener('contextrestored', () => {
+      this.stats.restored++;
+      this.logEvent(`context restored (${name} canvas)`);
+    });
     old.replaceWith(canvas);
     return canvas;
   }
@@ -210,6 +232,7 @@ export class Spike {
     let painted = 0;
     for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted++;
     this.stats.paint = `${Math.round((painted / (n * n)) * 100)}% painted`;
+    this.logEvent(`paint check: ${this.stats.paint} · undo ${this.undoText()}`);
   }
 
   protected toggleCpuCanvas(): void {
@@ -254,6 +277,7 @@ export class Spike {
     this.stats.pointer = e.pointerType;
 
     if (e.pointerType === 'pen') {
+      if (!this.penMode()) this.logEvent('pen seen: pen mode on');
       this.penMode.set(true);
       if (this.mode === 'pinch' || this.mode === 'pan') this.mode = 'idle';
       if (this.mode === 'idle') this.startStroke(e);
@@ -348,6 +372,7 @@ export class Spike {
   private startPinch(idA: number, idB: number): void {
     const a = this.pointers.get(idA)!.stage;
     const b = this.pointers.get(idB)!.stage;
+    this.logEvent('pinch');
     this.mode = 'pinch';
     this.pinchIds = [idA, idB];
     this.pinchStart = { view: { ...this.view }, a: { ...a }, b: { ...b } };
@@ -458,6 +483,16 @@ export class Spike {
     }
     this.stats.commitMs = performance.now() - t0;
     this.stats.strokeEnd = performance.now();
+    if (!this.stressing) {
+      const s = this.stats;
+      const seconds = (s.strokeEnd - s.strokeStart) / 1000;
+      this.logEvent(
+        `stroke ${this.strokeTool} by ${s.pointer} · ${s.samples} samples / ${s.events} events` +
+          ` · ${seconds > 0.05 ? Math.round(s.samples / seconds) : '-'} Hz` +
+          ` · draw ${s.events ? (s.drawTotal / s.events).toFixed(2) : '-'} ms/event` +
+          ` · commit ${s.commitMs.toFixed(1)} ms · undo ${this.undoText()}`,
+      );
+    }
     this.mode = 'idle';
     this.strokeId = -1;
     this.bbox = null;
@@ -492,10 +527,12 @@ export class Spike {
 
   protected undo(): void {
     this.history.undo();
+    this.logEvent(`undo · ${this.undoText()}`);
   }
 
   protected redo(): void {
     this.history.redo();
+    this.logEvent(`redo · ${this.undoText()}`);
   }
 
   protected clear(): void {
@@ -503,6 +540,7 @@ export class Spike {
     this.history.touch({ x: 0, y: 0, width: this.doc.width, height: this.doc.height });
     this.colourCtx.clearRect(0, 0, this.doc.width, this.doc.height);
     this.history.commit();
+    this.logEvent(`clear · undo ${this.undoText()}`);
   }
 
   protected changeDocSize(value: string): void {
@@ -514,6 +552,7 @@ export class Spike {
   // stack and see whether the tab survives (memory headroom).
   protected stressTest(): void {
     const t0 = performance.now();
+    this.stressing = true;
     const saved = { tool: this.strokeTool, size: this.sizeIndex() };
     this.strokeTool = 'pencil';
     this.sizeIndex.set(4);
@@ -536,7 +575,9 @@ export class Spike {
     }
     this.strokeTool = saved.tool;
     this.sizeIndex.set(saved.size);
+    this.stressing = false;
     this.stats.stress = `50 strokes in ${Math.round(performance.now() - t0)} ms`;
+    this.logEvent(`stress: ${this.stats.stress}`);
     this.checkPaint();
   }
 
@@ -548,11 +589,93 @@ export class Spike {
     this.worker ??= new Worker(new URL('./encode.worker', import.meta.url), { type: 'module' });
     this.worker.onmessage = ({ data }: MessageEvent<{ ms: number; bytes: number }>) => {
       this.stats.encode = `bitmap ${Math.round(bitmapMs)} ms (main) · PNG ${Math.round(data.ms)} ms (worker) · ${Math.round(data.bytes / 1024)} KB`;
+      this.logEvent(`encode: ${this.stats.encode}`);
     };
     this.worker.postMessage({ bitmap }, [bitmap]);
   }
 
   // ---- Readout -----------------------------------------------------------
+
+  // ---- Diagnostics report ------------------------------------------------
+
+  private elapsed(): string {
+    return `+${((performance.now() - this.t0) / 1000).toFixed(1)}s`;
+  }
+
+  private undoText(): string {
+    return `${this.history.undoDepth} steps · ${(this.history.totalBytes / 1048576).toFixed(1)} MB`;
+  }
+
+  private logEvent(message: string): void {
+    this.events.push(`${this.elapsed()} ${message}`);
+    if (this.events.length > 500) this.events.shift();
+  }
+
+  private snapshot(): void {
+    const h = this.hud();
+    if (!h || document.hidden) return;
+    this.snapshots.push(
+      `${this.elapsed()} frame ${h.frameMs}/${h.frameMax} ms · heap ${h.heap} · undo ${h.undo} · ${h.zoom} · ${h.canvas}`,
+    );
+    if (this.snapshots.length > 240) this.snapshots.shift();
+  }
+
+  protected async copyReport(): Promise<void> {
+    this.updateHud();
+    const h = this.hud()!;
+    const nav = navigator as Navigator & { deviceMemory?: number };
+    const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
+    const lines = [
+      `# Colouring spike report · ${new Date().toISOString()} · running ${this.elapsed()}`,
+      '',
+      '## Device',
+      `user agent: ${navigator.userAgent}`,
+      `screen ${screen.width}×${screen.height} · viewport ${innerWidth}×${innerHeight} · DPR ${devicePixelRatio}`,
+      `cores ${navigator.hardwareConcurrency ?? '?'} · device memory ${nav.deviceMemory ?? '?'} GB · touch points ${navigator.maxTouchPoints}`,
+      `installed app: ${standalone ? 'yes' : 'no'} · secure context: ${isSecureContext}`,
+      '',
+      '## Settings',
+      `document ${this.docSize()}² · ${this.cpuCanvas() ? 'CPU' : 'GPU'} canvas · tool ${this.tool()} · size ${this.sizeIndex() + 1}` +
+        ` · fingers draw ${this.fingerDraws()} · will-change ${this.willChange()}`,
+      '',
+      '## Readout now',
+      `pen mode ${this.penMode() ? 'on' : 'off'} · pointer ${h.pointer} · p=${h.pressure}`,
+      `input ${h.inputHz} · ${h.coalesced}/event · draw ${h.drawMs} ms/event`,
+      `frame ${h.frameMs} ms avg · ${h.frameMax} ms max · commit ${h.commitMs} ms`,
+      `zoom ${h.zoom} · undo ${h.undo} · JS heap ${h.heap}`,
+      `encode ${h.encode}`,
+      `stress ${h.stress}`,
+      `canvas ${h.canvas}`,
+      '',
+      `## Events (last ${this.events.length})`,
+      ...this.events,
+      '',
+      `## Readout every 5 s (last ${this.snapshots.length})`,
+      ...this.snapshots,
+    ];
+    const text = lines.join('\n');
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      // Fallback for when the async clipboard is unavailable.
+      const area = document.createElement('textarea');
+      area.value = text;
+      document.body.append(area);
+      area.select();
+      ok = document.execCommand('copy');
+      area.remove();
+    }
+    this.copyStatus.set(ok ? `copied ${lines.length} lines ✓` : 'copy failed');
+    setTimeout(() => this.copyStatus.set('tap to copy report'), 2500);
+  }
+
+  protected clearLog(): void {
+    this.events.length = 0;
+    this.snapshots.length = 0;
+    this.logEvent('log cleared');
+  }
 
   private updateHud(): void {
     const s = this.stats;
@@ -571,7 +694,7 @@ export class Spike {
       frameMax: max.toFixed(0),
       commitMs: s.commitMs.toFixed(1),
       zoom: `${Math.round((this.view.scale / fitScale(this.doc, this.stage)) * 100)}% of fit`,
-      undo: `${this.history.undoDepth} steps · ${(this.history.totalBytes / 1048576).toFixed(1)} MB`,
+      undo: this.undoText(),
       encode: s.encode,
       heap: memory ? `${Math.round(memory.usedJSHeapSize / 1048576)} MB` : 'n/a',
       stress: s.stress,
