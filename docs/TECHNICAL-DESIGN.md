@@ -384,6 +384,42 @@ a PWA. Then record the results in this doc:
 memory budget (9.1), and settles whether we need the fallback viewport
 renderer (section 2).
 
+### 11.1 Results so far (OnePlus Pad 3, Chrome 157, 2026-11-17)
+
+First run, in a Chrome tab (not installed), with fingers only: no pen
+events were recorded. The tablet reports a desktop user agent (X11
+Linux), 8 cores, 8 GB, DPR 2.625, a 1292×734 CSS-pixel viewport and a
+144 Hz display (6.9 ms frames when idle).
+
+| Check | Result |
+| --- | --- |
+| Touch input | 270–285 Hz samples, about 2 coalesced per event; drawing costs 0.03–0.07 ms per event |
+| Frames while drawing, pinching, panning | 7–11 ms average, worst 35–62 ms (a commit) |
+| Zoom | pinch to 736% of fit works; the SVG lines stay sharp |
+| Canvas loss | none (0 lost, 0 restored) in any run |
+| Stress ×50, 3072², GPU canvas | 4540 ms, 20 undo steps at the 150 MB cap |
+| Stress ×50, 3072², CPU canvas | **836 ms**, 15 steps |
+| Stress ×50, 2048², GPU canvas | 2359 ms, 34 steps |
+| Stress ×50, 2048², CPU canvas | **481 ms**, 34 steps |
+| Real stroke commit, 2048², GPU canvas | 1–60 ms |
+| Real stroke commit, 2048², CPU canvas | 6–13 ms |
+| Undo memory per real stroke, 2048² | 0.3–12 MB (long strokes snapshot their whole bounding box) |
+
+What this suggests:
+
+- **Use CPU-backed canvases** (`willReadFrequently: true`) for the
+  colour layer. Every commit reads pixels back for undo, and on the GPU
+  canvas that readback is 3–5× slower. Drawing cost was the same.
+- **Snapshot only the tiles a stroke touches**, not its whole bounding
+  box. A long diagonal stroke currently stores up to 12 MB at 2048², which
+  would leave only a dozen undo steps in 150 MB.
+- Performance leaves room for 3072². The undo budget is the real limit.
+
+Still to check: the stylus (pressure, sample rate, palm rejection), PNG
+encoding, the installed app, and the earlier report that Stress ×50 drew
+nothing visible (this run's paint check found 81–88% of the page
+painted).
+
 ## 12. When photo → line art comes back
 
 Mostly additive:
