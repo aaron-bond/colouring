@@ -53,6 +53,7 @@
     <div class="row">
       <button type="button" (click)="stressTest()">Stress ×50</button>
       <button type="button" (click)="encodePng()">Encode PNG</button>
+      <button type="button" (click)="checkPaint()">Check paint</button>
     </div>
     <label class="row"
       >Document
@@ -69,6 +70,10 @@
     <label class="row check"
       ><input type="checkbox" [checked]="willChange()" (change)="willChange.set(!willChange())" /> will-change:
       transform</label
+    >
+    <label class="row check"
+      ><input type="checkbox" [checked]="cpuCanvas()" (change)="toggleCpuCanvas()" /> CPU canvas
+      (willReadFrequently; clears the page)</label
     >
     <a routerLink="/">← Back</a>
   }
@@ -98,5 +103,7 @@
     <dd>{{ h.encode }}</dd>
     <dt>stress</dt>
     <dd>{{ h.stress }}</dd>
+    <dt>canvas</dt>
+    <dd>{{ h.canvas }}</dd>
   </dl>
 }

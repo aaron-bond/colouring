@@ -41,6 +41,7 @@ interface Hud {
   encode: string;
   heap: string;
   stress: string;
+  canvas: string;
 }
 
 // Brush diameters as fractions of the document's long side, so the 5
@@ -71,10 +72,13 @@ export class Spike {
   protected readonly penMode = signal(false);
   protected readonly fingerDraws = signal(false);
   protected readonly willChange = signal(false);
+  protected readonly cpuCanvas = signal(false);
   protected readonly panelOpen = signal(true);
   protected readonly hud = signal<Hud | null>(null);
   protected readonly pencilOpacity = PENCIL_OPACITY;
 
+  private colourEl!: HTMLCanvasElement;
+  private wetEl!: HTMLCanvasElement;
   private colourCtx!: CanvasRenderingContext2D;
   private wetCtx!: CanvasRenderingContext2D;
   private history!: TileHistory<ImageData>;
@@ -109,6 +113,9 @@ export class Spike {
     frames: [] as number[],
     encode: '-',
     stress: '-',
+    lost: 0,
+    restored: 0,
+    paint: '-',
   };
   private worker?: Worker;
 
@@ -158,20 +165,56 @@ export class Spike {
 
   private setUpDocument(longSide: number): void {
     this.doc = { width: longSide, height: longSide };
-    for (const ref of [this.colourRef(), this.wetRef()]) {
-      const canvas = ref.nativeElement;
-      canvas.width = longSide;
-      canvas.height = longSide;
-      canvas.style.width = `${longSide}px`;
-      canvas.style.height = `${longSide}px`;
-    }
-    this.colourCtx = this.colourRef().nativeElement.getContext('2d')!;
-    this.wetCtx = this.wetRef().nativeElement.getContext('2d')!;
+    // Fresh canvas elements every time: context options such as
+    // willReadFrequently only apply to a canvas's first getContext call.
+    this.colourEl = this.freshCanvas(this.colourEl ?? this.colourRef().nativeElement, longSide);
+    this.wetEl = this.freshCanvas(this.wetEl ?? this.wetRef().nativeElement, longSide);
+    const options: CanvasRenderingContext2DSettings = { willReadFrequently: this.cpuCanvas() };
+    this.colourCtx = this.colourEl.getContext('2d', options)!;
+    this.wetCtx = this.wetEl.getContext('2d', options)!;
+    this.stats.lost = 0;
+    this.stats.restored = 0;
+    this.stats.paint = '-';
     this.history = new TileHistory(canvasSurface(this.colourCtx), UNDO_BUDGET_BYTES);
     const page = this.pageRef().nativeElement;
     page.style.width = `${longSide}px`;
     page.style.height = `${longSide}px`;
     this.fit();
+  }
+
+  // Replaces a canvas with a blank copy (same class and inline styles) and
+  // counts context loss: Android Chrome can drop a canvas's GPU memory, which
+  // blanks it and silently ignores drawing until the context is restored.
+  private freshCanvas(old: HTMLCanvasElement, size: number): HTMLCanvasElement {
+    const canvas = old.cloneNode(false) as HTMLCanvasElement;
+    canvas.width = size;
+    canvas.height = size;
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+    canvas.addEventListener('contextlost', () => this.stats.lost++);
+    canvas.addEventListener('contextrestored', () => this.stats.restored++);
+    old.replaceWith(canvas);
+    return canvas;
+  }
+
+  // Reports how much of the colour layer holds paint, by shrinking it onto a
+  // small canvas: tells "drawn but not shown" apart from "never drawn".
+  protected checkPaint(): void {
+    const n = 128;
+    const probe = document.createElement('canvas');
+    probe.width = n;
+    probe.height = n;
+    const ctx = probe.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(this.colourEl, 0, 0, n, n);
+    const data = ctx.getImageData(0, 0, n, n).data;
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted++;
+    this.stats.paint = `${Math.round((painted / (n * n)) * 100)}% painted`;
+  }
+
+  protected toggleCpuCanvas(): void {
+    this.cpuCanvas.set(!this.cpuCanvas());
+    this.setUpDocument(this.docSize());
   }
 
   private measureStage(refit: boolean): void {
@@ -408,7 +451,7 @@ export class Spike {
       this.history.begin();
       this.history.touch(b);
       this.colourCtx.globalAlpha = PENCIL_OPACITY;
-      this.colourCtx.drawImage(this.wetRef().nativeElement, b.x, b.y, b.width, b.height, b.x, b.y, b.width, b.height);
+      this.colourCtx.drawImage(this.wetEl, b.x, b.y, b.width, b.height, b.x, b.y, b.width, b.height);
       this.colourCtx.globalAlpha = 1;
       this.wetCtx.clearRect(b.x, b.y, b.width, b.height);
       this.history.commit();
@@ -494,12 +537,13 @@ export class Spike {
     this.strokeTool = saved.tool;
     this.sizeIndex.set(saved.size);
     this.stats.stress = `50 strokes in ${Math.round(performance.now() - t0)} ms`;
+    this.checkPaint();
   }
 
   protected async encodePng(): Promise<void> {
     this.stats.encode = 'encoding…';
     const t0 = performance.now();
-    const bitmap = await createImageBitmap(this.colourRef().nativeElement);
+    const bitmap = await createImageBitmap(this.colourEl);
     const bitmapMs = performance.now() - t0;
     this.worker ??= new Worker(new URL('./encode.worker', import.meta.url), { type: 'module' });
     this.worker.onmessage = ({ data }: MessageEvent<{ ms: number; bytes: number }>) => {
@@ -531,6 +575,7 @@ export class Spike {
       encode: s.encode,
       heap: memory ? `${Math.round(memory.usedJSHeapSize / 1048576)} MB` : 'n/a',
       stress: s.stress,
+      canvas: `${this.cpuCanvas() ? 'CPU' : 'GPU'} · lost ${s.lost} · restored ${s.restored} · ${s.paint}`,
     });
   }
 }
