@@ -1,0 +1,72 @@
+<div class="screen">
+  <header class="toolbar" aria-label="Tools">
+    <a routerLink="/" class="back">← Library</a>
+    <span class="title">{{ picture()?.title ?? '…' }}</span>
+
+    <div class="group" role="group" aria-label="Tool">
+      <button type="button" [class.on]="tool() === 'pencil'" [attr.aria-pressed]="tool() === 'pencil'" (click)="tool.set('pencil')">Pencil</button>
+      <button type="button" [class.on]="tool() === 'eraser'" [attr.aria-pressed]="tool() === 'eraser'" (click)="tool.set('eraser')">Eraser</button>
+    </div>
+
+    <div class="group" role="group" aria-label="Size">
+      @for (i of sizes; track i) {
+        <button type="button" [class.on]="sizeIndex() === i" [attr.aria-pressed]="sizeIndex() === i" [attr.aria-label]="'Size ' + (i + 1)" (click)="sizeIndex.set(i)">
+          {{ i + 1 }}
+        </button>
+      }
+    </div>
+
+    <div class="group" role="group" aria-label="Colour">
+      @for (c of colours; track c) {
+        <button
+          type="button"
+          class="swatch"
+          [class.on]="colour() === c"
+          [attr.aria-pressed]="colour() === c"
+          [style.background]="c"
+          [attr.aria-label]="'Colour ' + c"
+          (click)="colour.set(c); tool.set('pencil')"
+        ></button>
+      }
+    </div>
+
+    <div class="group">
+      <button type="button" [disabled]="!canUndo()" (click)="undo()">Undo</button>
+      <button type="button" [disabled]="!canRedo()" (click)="redo()">Redo</button>
+      <button type="button" (click)="fit()">Fit</button>
+    </div>
+  </header>
+
+  <div
+    class="stage"
+    #stage
+    (pointerdown)="onPointerDown($event)"
+    (pointermove)="onPointerMove($event)"
+    (pointerup)="onPointerUp($event)"
+    (pointercancel)="onPointerUp($event)"
+    (wheel)="onWheel($event)"
+    (contextmenu)="$event.preventDefault()"
+  >
+    <div class="page" #page [class.ready]="docSize()">
+      <div class="paper"></div>
+      <canvas #colourCanvas class="layer colour"></canvas>
+      <canvas #wetCanvas class="layer wet"></canvas>
+      @if (picture(); as p) {
+        <img class="layer lines" [src]="p.svg" alt="" draggable="false" />
+      }
+    </div>
+
+    @if (showDebug()) {
+      <app-debug-readout
+        [lines]="readout()"
+        [status]="copyStatus()"
+        [fingersDraw]="fingersDraw()"
+        (fingersDrawChange)="setFingersDraw($event)"
+        [(smoothing)]="smoothing"
+        [(tuning)]="tuning"
+        (copy)="copyReport()"
+        (clear)="clearLog()"
+      />
+    }
+  </div>
+</div>

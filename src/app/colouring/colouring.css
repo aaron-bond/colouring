@@ -1,0 +1,108 @@
+/* Plain controls for milestone 2; the C1 theme replaces them in
+   milestone 6 (TECHNICAL-DESIGN.md 15). */
+:host {
+  position: fixed;
+  inset: 0;
+}
+
+.screen {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px
+    max(12px, env(safe-area-inset-left));
+  background: #f4ecd9;
+  border-bottom: 1px solid #d8ccb4;
+  font-size: 14px;
+}
+
+.back {
+  min-height: 44px;
+  line-height: 44px;
+  color: inherit;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.group {
+  display: flex;
+  gap: 4px;
+}
+
+button {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #b9a88e;
+  border-radius: 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+button.on {
+  background: #3a2e22;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.4;
+}
+
+.swatch {
+  padding: 0;
+  border-radius: 50%;
+}
+
+.swatch.on {
+  outline: 3px solid #3a2e22;
+  outline-offset: 2px;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  background: #1f6f78;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.page {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  visibility: hidden;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 20%);
+}
+
+.page.ready {
+  visibility: visible;
+}
+
+.paper,
+.layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.paper {
+  background: #fffdf7;
+}
+
+.lines {
+  pointer-events: none;
+}

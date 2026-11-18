@@ -62,7 +62,7 @@ URLs, the server only ever sees `/colouring/`.
 | Route | Screen | Notes |
 | --- | --- | --- |
 | `''` | Library | `?category=animals` keeps the selected index tab in the URL |
-| `colour/new/:pictureId` | none | Creates an `Artwork`, then redirects (`replaceUrl`) to `colour/:artworkId` |
+| `colour/new/:pictureId` | none | Creates an `Artwork`, then redirects (`replaceUrl`) to `colour/:artworkId`. Until milestone 3 stores artworks, it opens the Colouring screen directly |
 | `colour/:artworkId` | Colouring | A resolver loads the artwork; an unknown id redirects to the library |
 | `finished/:artworkId` | Finished | |
 | `**` | none | Redirects to the library |
@@ -71,19 +71,24 @@ URLs, the server only ever sees `/colouring/`.
 src/app/
   app.routes.ts           the routes above, each loadComponent()-ed
   app.ts                  shell: <router-outlet>, install button
+  app.config.ts           router (hash URLs, input binding), service worker
   library/                Library screen: plates, index tabs, in-progress
   colouring/              Colouring screen: stage, tool roll, paint tin, mixer
+    debug-readout.ts      hidden diagnostics and pencil tuning (?debug=1)
   finished/               Finished screen: stamp, save/share/print
   core/
     catalogue.service.ts  loads catalogue.json; Picture definitions
     artwork.store.ts      IndexedDB: artworks, images, thumbnails
     prefs.service.ts      handedness, finger-draws-with-pen, recents, last tool
     export.service.ts     flatten → PNG, share sheet, print
+    app-updates.ts        switching to a new version (3.1)
   engine/                 plain TypeScript, no Angular, unit-testable
     document.ts           layers + document size
     viewport.ts           transform maths (screen ↔ document)
     input.ts              pointer/gesture state machine
-    brushes/              brush specs + stamp renderer
+    smoothing.ts          one-euro filter for pointer positions
+    brush.ts              brush specs, pressure response, dab planner
+    diagnostics.ts        event log and copyable report for device tests
     history.ts            tile copy-on-write undo/redo
     save.worker.ts        PNG encoding off the main thread
     (later: fill-client.ts + fill.worker.ts, see section 8)
@@ -616,7 +621,7 @@ code; this covers its project setup and conventions.
 
 1. **Spike on the OnePlus Pad 3** (section 11). **Done 2026-11-18**;
    results in 11.1.
-2. **Engine core:** app scaffold with routes, document and layers,
+2. **Engine core** (built 2026-11-18, awaiting device tuning): app scaffold with routes, document and layers,
    viewport zoom/pan, the input state machine, Pencil, Eraser, tile
    undo/redo. Tested on 2 SVGs, with unstyled UI. Keep the spike's
    copyable diagnostics report as a hidden debug readout, so device

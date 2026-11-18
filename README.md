@@ -5,9 +5,9 @@ colour in with a pencil, an eraser and undo, saved on the device. It's
 an installable PWA on GitHub Pages, built with Angular 22 (standalone
 components and signals).
 
-**Status:** MVP in progress. The current build is the device spike: a
-throwaway drawing page at `#/spike` used to check drawing, zoom and
-memory on the target tablet before building the real screens.
+**Status:** MVP in progress: milestone 2 (the engine core). The
+colouring screen draws with Pencil and Eraser, zooms and pans, and has
+undo, on two test pictures with plain controls.
 
 ## Docs
 
@@ -39,6 +39,15 @@ plain `http://<your-ip>:4200` is only a partial test. Better options:
 2. **USB:** enable USB debugging on the tablet, run `npm start`, then
    `adb reverse tcp:4200 tcp:4200` and open `http://localhost:4200` on
    the tablet. `localhost` counts as secure.
+
+### Diagnostics on the tablet
+
+Open a picture with `?debug=1` on the end of its URL (for example
+`…/colouring/#/colour/new/tulips?debug=1`) to show a readout and pencil
+tuning controls. The setting is remembered on the device; `?debug=0`
+hides it again. Tap the readout to copy a plain-text report (device,
+settings, every stroke's input rate and pressure range, frame times,
+undo memory) to paste into a bug report or a chat.
 
 ## Deployment
 

@@ -1,0 +1,26 @@
+{
+  "pictures": [
+    {
+      "id": "lotus-mandala",
+      "version": 1,
+      "title": "Lotus mandala",
+      "latinName": "Mandala lotus",
+      "plate": 1,
+      "category": "mandalas",
+      "difficulty": 3,
+      "svg": "pictures/lotus-mandala.v1.svg",
+      "docLongSide": 3072
+    },
+    {
+      "id": "tulips",
+      "version": 1,
+      "title": "Tulips",
+      "latinName": "Tulipa gesneriana",
+      "plate": 2,
+      "category": "plants",
+      "difficulty": 1,
+      "svg": "pictures/tulips.v1.svg",
+      "docLongSide": 2048
+    }
+  ]
+}

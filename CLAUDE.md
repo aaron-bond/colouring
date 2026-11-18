@@ -21,5 +21,5 @@ MVP target: OnePlus Pad 3 in Chrome.
   not from effects that write signals.
 - Unit tests: `npm run test:ci`. Browser tests: `npm run e2e` (Chromium
   projects are blocking in CI; `webkit-ipad` is informational).
-- `src/app/spike/` is throwaway (milestone 1). Delete it once the spike
-  results are recorded in the design doc.
+- Device testing: open a picture with `?debug=1` and paste the copied
+  report back (README, "Diagnostics on the tablet").
