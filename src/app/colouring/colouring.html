@@ -63,6 +63,8 @@
         [fingersDraw]="fingersDraw()"
         (fingersDrawChange)="setFingersDraw($event)"
         [(smoothing)]="smoothing"
+        [wetGpu]="wetGpu()"
+        (wetGpuChange)="setWetGpu($event)"
         [(tuning)]="tuning"
         (copy)="copyReport()"
         (clear)="clearLog()"

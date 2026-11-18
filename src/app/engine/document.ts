@@ -2,9 +2,14 @@
 // pixels are the artwork, a wet layer for the stroke in progress, and
 // tile undo over the colour layer. Coordinates are document pixels.
 //
-// Both canvases are CPU-backed (`willReadFrequently`): undo reads tiles
+// The colour layer is CPU-backed (`willReadFrequently`): undo reads tiles
 // back on every commit, and on the OnePlus that was 3-5x faster than from
-// a GPU canvas, with no difference in drawing cost (11.1).
+// a GPU canvas (11.1). The wet layer is never read back, so it can be
+// GPU-backed instead (`wetOnGpu`, on trial: 16, decision 11). A CPU
+// canvas is copied to the GPU each frame it changes, which may be what
+// makes the line lag behind the pen. On the GPU the wet pixels can't be
+// copied across cheaply, so a commit redraws the stroke's dabs onto the
+// colour layer instead.
 
 import { BrushSpec, Dab, SIZE_FRACTIONS, StrokePlanner } from './brush';
 import { Rect, Size, TileHistory, canvasSurface, tileKeysIn, tileRect } from './history';
@@ -18,27 +23,30 @@ interface Stroke {
   planner: StrokePlanner;
   // Tiles the stroke's dabs have landed in.
   tiles: Set<number>;
+  // Every dab so far, to redraw on commit when the wet layer is on the GPU.
+  dabs: Dab[];
 }
 
 export class ColourDocument {
   private readonly colourCtx: CanvasRenderingContext2D;
-  private readonly wetCtx: CanvasRenderingContext2D;
+  private wetCanvas: HTMLCanvasElement;
+  private wetCtx: CanvasRenderingContext2D;
+  private wetGpu: boolean;
   private readonly history: TileHistory<ImageData>;
   private stroke: Stroke | null = null;
 
   constructor(
-    private readonly colourCanvas: HTMLCanvasElement,
-    private readonly wetCanvas: HTMLCanvasElement,
+    colourCanvas: HTMLCanvasElement,
+    wetCanvas: HTMLCanvasElement,
     readonly size: Size,
-    budgetBytes = UNDO_BUDGET_BYTES,
+    { budgetBytes = UNDO_BUDGET_BYTES, wetOnGpu = false } = {},
   ) {
-    for (const canvas of [colourCanvas, wetCanvas]) {
-      canvas.width = size.width;
-      canvas.height = size.height;
-    }
-    const options: CanvasRenderingContext2DSettings = { willReadFrequently: true };
-    this.colourCtx = colourCanvas.getContext('2d', options)!;
-    this.wetCtx = wetCanvas.getContext('2d', options)!;
+    colourCanvas.width = size.width;
+    colourCanvas.height = size.height;
+    this.colourCtx = colourCanvas.getContext('2d', { willReadFrequently: true })!;
+    this.wetCanvas = wetCanvas;
+    this.wetCtx = this.prepareWet(wetCanvas, wetOnGpu);
+    this.wetGpu = wetOnGpu;
     this.history = new TileHistory(canvasSurface(this.colourCtx), budgetBytes);
   }
 
@@ -58,6 +66,19 @@ export class ColourDocument {
     return this.history.totalBytes;
   }
 
+  get wetOnGpu(): boolean {
+    return this.wetGpu;
+  }
+
+  // Moves the wet layer to a fresh canvas (a canvas's backing can't change
+  // once it has a context). Any stroke in progress is committed first.
+  useWetCanvas(canvas: HTMLCanvasElement, gpu: boolean): void {
+    this.endStroke();
+    this.wetCtx = this.prepareWet(canvas, gpu);
+    this.wetCanvas = canvas;
+    this.wetGpu = gpu;
+  }
+
   get drawing(): boolean {
     return this.stroke !== null;
   }
@@ -70,7 +91,7 @@ export class ColourDocument {
   beginStroke(brush: BrushSpec, colour: string, sizeIndex: number, at: Point, pressure: number): void {
     if (this.stroke) this.cancelStroke();
     const planner = new StrokePlanner(brush, this.baseRadius(sizeIndex), at, pressure);
-    this.stroke = { brush, colour, planner, tiles: new Set() };
+    this.stroke = { brush, colour, planner, tiles: new Set(), dabs: [] };
     // The eraser changes the colour layer directly, snapshotting as it goes.
     if (brush.erases) this.history.begin();
     this.paint([planner.first()]);
@@ -96,11 +117,17 @@ export class ColourDocument {
     // Only the tiles the stroke actually crossed are snapshotted and
     // composited, not its whole bounding box (11.1).
     this.history.begin();
-    for (const key of stroke.tiles) {
-      const r = tileRect(key, this.size);
-      this.history.touchTile(key);
-      this.colourCtx.drawImage(this.wetCanvas, r.x, r.y, r.width, r.height, r.x, r.y, r.width, r.height);
-      this.wetCtx.clearRect(r.x, r.y, r.width, r.height);
+    if (this.wetGpu) {
+      for (const key of stroke.tiles) this.history.touchTile(key);
+      drawDabs(this.colourCtx, stroke.dabs, stroke.colour);
+      for (const key of stroke.tiles) this.clearWetTile(key);
+    } else {
+      for (const key of stroke.tiles) {
+        const r = tileRect(key, this.size);
+        this.history.touchTile(key);
+        this.colourCtx.drawImage(this.wetCanvas, r.x, r.y, r.width, r.height, r.x, r.y, r.width, r.height);
+        this.clearWetTile(key);
+      }
     }
     this.history.commit();
   }
@@ -115,10 +142,7 @@ export class ColourDocument {
       this.history.rollback();
       return;
     }
-    for (const key of stroke.tiles) {
-      const r = tileRect(key, this.size);
-      this.wetCtx.clearRect(r.x, r.y, r.width, r.height);
-    }
+    for (const key of stroke.tiles) this.clearWetTile(key);
   }
 
   undo(): boolean {
@@ -131,26 +155,33 @@ export class ColourDocument {
     return this.history.redo();
   }
 
+  private prepareWet(canvas: HTMLCanvasElement, gpu: boolean): CanvasRenderingContext2D {
+    canvas.width = this.size.width;
+    canvas.height = this.size.height;
+    return canvas.getContext('2d', { willReadFrequently: !gpu })!;
+  }
+
+  private clearWetTile(key: number): void {
+    const r = tileRect(key, this.size);
+    this.wetCtx.clearRect(r.x, r.y, r.width, r.height);
+  }
+
   private paint(dabs: Dab[]): void {
     const stroke = this.stroke!;
     const erases = stroke.brush.erases;
-    const ctx = erases ? this.colourCtx : this.wetCtx;
-    ctx.save();
-    if (erases) ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = erases ? '#000' : stroke.colour;
     for (const dab of dabs) {
-      const bounds = this.dabBounds(dab);
-      for (const key of tileKeysIn(bounds, this.size)) {
+      for (const key of tileKeysIn(this.dabBounds(dab), this.size)) {
         if (stroke.tiles.has(key)) continue;
         stroke.tiles.add(key);
         if (erases) this.history.touchTile(key);
       }
-      ctx.globalAlpha = dab.alpha;
-      ctx.beginPath();
-      ctx.arc(dab.x, dab.y, dab.radius, 0, Math.PI * 2);
-      ctx.fill();
     }
-    ctx.restore();
+    if (erases) {
+      drawDabs(this.colourCtx, dabs, '#000', 'destination-out');
+    } else {
+      drawDabs(this.wetCtx, dabs, stroke.colour);
+      if (this.wetGpu) stroke.dabs.push(...dabs);
+    }
   }
 
   private dabBounds(dab: Dab): Rect {
@@ -162,4 +193,19 @@ export class ColourDocument {
       height: Math.ceil(r * 2) + 1,
     };
   }
+}
+
+// Source-over is associative, so dabs drawn straight onto the colour layer
+// give the same result as dabs drawn onto the wet layer and then copied.
+function drawDabs(ctx: CanvasRenderingContext2D, dabs: Dab[], colour: string, op: GlobalCompositeOperation = 'source-over'): void {
+  ctx.save();
+  ctx.globalCompositeOperation = op;
+  ctx.fillStyle = colour;
+  for (const dab of dabs) {
+    ctx.globalAlpha = dab.alpha;
+    ctx.beginPath();
+    ctx.arc(dab.x, dab.y, dab.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }

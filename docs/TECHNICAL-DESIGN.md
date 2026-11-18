@@ -263,8 +263,9 @@ keeps it unit-testable.
   lands before the first lifts, the wet layer is cleared and the touch
   becomes a pinch, so a pinch never leaves paint behind.
 - `getCoalescedEvents()` gives the full Apple Pencil sample rate (up to
-  240 Hz) for smooth strokes. Points get light smoothing (a one-euro
-  filter).
+  240 Hz) for smooth strokes. A one-euro smoothing filter exists but is
+  **off**: on the OnePlus it made the line trail the pen, and the raw
+  path was steady enough (decision 12).
 - The stage keeps the sample's `touch-action: none`, pointer capture and
   `preventDefault`, and also blocks Safari's `gesturestart` and
   double-tap zoom.
@@ -663,3 +664,19 @@ From the OnePlus spike, 2026-11-18 (section 11.1):
    and tune it on the device.
 10. **Viewport:** CSS transform over document-sized canvases, as
     designed; no fallback renderer.
+
+From device testing of milestone 2, 2026-11-18:
+
+11. **Wet layer backing: on trial.** The line lagged behind the pen. A
+    CPU canvas is copied to the GPU on every frame it changes (up to
+    36 MB for a 3072² page), so the wet layer can now be GPU-backed
+    with a debug switch ("Draw the stroke on the GPU"). The colour
+    layer stays on the CPU for undo readback. With the wet layer on
+    the GPU, a commit redraws the stroke's dabs onto the colour layer
+    instead of copying pixels (copying from a GPU canvas cost up to
+    99 ms in the spike). Source-over is associative, so the result is
+    the same. A brush that composites at stroke opacity (Marker) would
+    need the dabs drawn to a scratch tile first. Pick the default from
+    the tablet's verdict, then remove the switch.
+12. **Path smoothing off** by default; the switch stays in the debug
+    readout.

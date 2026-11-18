@@ -17,6 +17,7 @@ import { DebugReadout, PencilTuning, ReadoutLine } from './debug-readout';
 // Until the palette arrives (milestone 5).
 const COLOURS = ['#3A2E22', '#E8590C', '#F06595', '#FCC419', '#20C997', '#339AF0', '#7950F2', '#868E96'];
 const DEBUG_KEY = 'colouring.debug';
+const WET_GPU_KEY = 'colouring.wetGpu';
 
 @Component({
   selector: 'app-colouring',
@@ -51,7 +52,10 @@ export class Colouring {
   protected readonly readout = signal<ReadoutLine[]>([]);
   protected readonly copyStatus = signal('tap to copy report');
   protected readonly fingersDraw = signal(false);
-  protected readonly smoothing = signal(true);
+  // Off: the filter's lag was felt on the tablet, and the raw path is
+  // steady enough (TECHNICAL-DESIGN.md 7).
+  protected readonly smoothing = signal(false);
+  protected readonly wetGpu = signal(readFlag(WET_GPU_KEY));
   protected readonly tuning = signal<PencilTuning>({
     sizeMin: PENCIL.sizeMin,
     opacityMin: PENCIL.opacityMin,
@@ -63,6 +67,8 @@ export class Colouring {
   private readonly input = new InputMachine();
   private readonly diagnostics = new Diagnostics();
   private smoother: PointSmoother | null = null;
+  // The wet canvas, once a backing switch has replaced the template's one.
+  private wetCanvasEl: HTMLCanvasElement | null = null;
   private stage: Size = { width: 1, height: 1 };
   private stageLeft = 0;
   private stageTop = 0;
@@ -129,13 +135,15 @@ export class Colouring {
     }
     const svg = await fetch(picture.svg).then((res) => res.text());
     const size = documentSize(svg, picture.docLongSide);
-    this.doc = new ColourDocument(this.colourRef().nativeElement, this.wetRef().nativeElement, size);
+    this.doc = new ColourDocument(this.colourRef().nativeElement, this.wetRef().nativeElement, size, {
+      wetOnGpu: this.wetGpu(),
+    });
     const page = this.pageRef().nativeElement;
     page.style.width = `${size.width}px`;
     page.style.height = `${size.height}px`;
     this.picture.set(picture);
     this.docSize.set(size);
-    this.diagnostics.log(`opened ${picture.id} · document ${size.width}×${size.height}`);
+    this.diagnostics.log(`opened ${picture.id} · document ${size.width}×${size.height} · wet layer on ${this.wetLayerText()}`);
     this.fit();
     this.applyView();
   }
@@ -357,6 +365,7 @@ export class Colouring {
       { label: 'stroke', value: s ? `${s.tool} by ${s.kind} · ${s.hz ?? '-'} Hz · ${s.samples} samples` : '-' },
       { label: 'pressure', value: s ? `${s.pressureMin.toFixed(2)}–${s.pressureMax.toFixed(2)} (avg ${s.pressureAvg.toFixed(2)})` : '-' },
       { label: 'draw', value: s?.drawMsPerEvent != null ? `${s.drawMsPerEvent.toFixed(2)} ms/event` : '-' },
+      { label: 'wet layer', value: this.wetLayerText() },
       { label: 'commit', value: `${d.lastCommitMs.toFixed(1)} ms` },
       { label: 'frame', value: `${frames.avg.toFixed(1)} ms avg · ${frames.max.toFixed(0)} ms max` },
       { label: 'zoom', value: `${zoom}% of fit` },
@@ -396,7 +405,7 @@ export class Colouring {
         [
           `picture ${this.picture()?.id ?? '-'} · document ${size ? `${size.width}×${size.height}` : '-'}`,
           `tool ${this.tool()} · size ${this.sizeIndex() + 1} · colour ${this.colour()}`,
-          `fingers draw in pen mode ${this.fingersDraw()} · smoothing ${this.smoothing()}`,
+          `fingers draw in pen mode ${this.fingersDraw()} · smoothing ${this.smoothing()} · wet layer on ${this.wetLayerText()}`,
           `pencil: width at no pressure ${t.sizeMin} · opacity ${t.opacityMin}–${t.opacityMax} · curve ${t.gamma}`,
         ],
       ],
@@ -411,9 +420,46 @@ export class Colouring {
     this.diagnostics.clear();
   }
 
+  // A canvas can't change backing once it has a context, so the wet layer
+  // moves to a fresh copy of its element (keeping Angular's style scoping).
+  protected setWetGpu(gpu: boolean): void {
+    this.wetGpu.set(gpu);
+    writeFlag(WET_GPU_KEY, gpu);
+    if (!this.doc) return;
+    const old = this.wetCanvasEl ?? this.wetRef().nativeElement;
+    const fresh = old.cloneNode(false) as HTMLCanvasElement;
+    this.apply(this.input.reset());
+    this.doc.useWetCanvas(fresh, gpu);
+    old.replaceWith(fresh);
+    this.wetCanvasEl = fresh;
+    this.refreshHistory();
+    this.diagnostics.log(`wet layer on ${this.wetLayerText()}`);
+  }
+
+  private wetLayerText(): string {
+    return this.wetGpu() ? 'GPU' : 'CPU';
+  }
+
   protected setFingersDraw(value: boolean): void {
     this.fingersDraw.set(value);
     this.input.fingersDrawInPenMode = value;
+  }
+}
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, on: boolean): void {
+  try {
+    if (on) localStorage.setItem(key, '1');
+    else localStorage.removeItem(key);
+  } catch {
+    // Private mode: the setting lasts until the page closes.
   }
 }
 

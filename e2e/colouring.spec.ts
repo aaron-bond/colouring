@@ -206,6 +206,29 @@ test.describe('the debug readout', () => {
     expect(report).toContain('document 3072×3072');
   });
 
+  test('with the stroke on the GPU, commits match and undo works', async ({ page }) => {
+    await open(page, 'lotus-mandala', '?debug=1');
+    const [cx, cy] = await stageCentre(page);
+    await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy + 40]);
+    const onCpu = await paintedPixels(page);
+    await page.getByRole('button', { name: 'Undo' }).click();
+
+    await page.getByRole('button', { name: 'Tuning' }).click();
+    await page.getByLabel('Draw the stroke on the GPU').check();
+    await expect(page.locator('dt', { hasText: 'wet layer' }).locator('xpath=following-sibling::dd[1]')).toHaveText('GPU');
+    await stroke(page, 'pen', 2, [cx - 100, cy], [cx + 100, cy + 40]);
+    const onGpu = await paintedPixels(page);
+    expect(Math.abs(onGpu - onCpu)).toBeLessThan(onCpu * 0.02);
+    const wetLeft = await page.locator('canvas.wet').evaluate((c: HTMLCanvasElement) => {
+      // Reading a GPU canvas back is slow but fine in a test.
+      const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+      return data.some((v, i) => i % 4 === 3 && v > 0);
+    });
+    expect(wetLeft).toBe(false);
+    await page.getByRole('button', { name: 'Undo' }).click();
+    expect(await paintedPixels(page)).toBe(0);
+  });
+
   test('a long diagonal stroke only stores the tiles it crosses', async ({ page }) => {
     await open(page, 'lotus-mandala', '?debug=1');
     const box = (await page.locator('.stage').boundingBox())!;

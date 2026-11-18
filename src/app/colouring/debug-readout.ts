@@ -35,6 +35,7 @@ export interface PencilTuning {
         <div class="controls">
           <label><input type="checkbox" [checked]="fingersDraw()" (change)="fingersDraw.set(!fingersDraw())" /> Fingers draw in pen mode</label>
           <label><input type="checkbox" [checked]="smoothing()" (change)="smoothing.set(!smoothing())" /> Smooth the pen's path</label>
+          <label><input type="checkbox" [checked]="wetGpu()" (change)="wetGpu.set(!wetGpu())" /> Draw the stroke on the GPU</label>
           <label>
             Pencil width at no pressure {{ pct(tuning().sizeMin) }}
             <input type="range" min="0.05" max="1" step="0.05" [value]="tuning().sizeMin" (input)="tune('sizeMin', $event)" />
@@ -132,6 +133,7 @@ export class DebugReadout {
   readonly status = input.required<string>();
   readonly fingersDraw = model.required<boolean>();
   readonly smoothing = model.required<boolean>();
+  readonly wetGpu = model.required<boolean>();
   readonly tuning = model.required<PencilTuning>();
   readonly copy = output<void>();
   readonly clear = output<void>();
