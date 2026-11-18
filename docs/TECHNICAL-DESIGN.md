@@ -93,6 +93,59 @@ src/app/
 a thin shell that wires DOM events and signals to it, and most logic can
 be tested as pure functions.
 
+### 3.1 New versions
+
+**The problem.** Angular's service worker serves the version it has
+cached and downloads a new one in the background. Without help, a
+visitor keeps running the old build until every tab of the app has
+closed. Seen on the OnePlus on 2026-11-18: the first reload after a
+deploy still ran the old code.
+
+**What we reuse from xbox-clips-ui** (its `PLAN-v1.md` §15, built
+2026-11-07, for open tabs without a service worker):
+
+- **Check when the app comes back into view:** on `visibilitychange` to
+  visible, window `focus` and `pageshow`, at most once an hour. There's
+  no timer, because every way an app goes stale (backgrounded, slept,
+  switched away from) passes through becoming visible again.
+- **Switch on the next navigation, never in the middle of something.**
+  Nobody loses a stroke to a reload.
+- **Different, not newer.** A rolled-back deploy should move devices
+  back too.
+- **Don't reload for nothing.** A docs-only push shouldn't count as a
+  new version.
+
+**What Angular gives us instead of hand-rolled parts.** `SwUpdate`
+replaces xbox-clips-ui's `version.json` and build ID:
+
+- `checkForUpdate()` does the check (fetching `ngsw.json` with no
+  cache).
+- `versionUpdates` emits `VERSION_READY` once the new version is fully
+  downloaded, so switching never hits a half-downloaded build.
+- The service worker's manifest is made of content hashes of the built
+  files, so a docs-only push leaves it unchanged, and it follows
+  whatever the server has, including rollbacks.
+- `unrecoverable` reports when the cached files are gone. The app then
+  reloads at once, since there's nothing safe to keep running.
+
+**How it switches** (`core/app-updates.ts`):
+
+- **At startup:** if a new version is ready within 10 s of launch,
+  reload at once. Nothing has been done yet, and this fixes "the first
+  reload runs the old build". (Once autosave exists, also require that
+  nothing is unsaved.)
+- **Afterwards, on the next screen change:** a root `canActivateChild`
+  guard sees the ready flag, activates the update and does a full load
+  of the destination. Angular runs `canDeactivate` guards first, so the
+  colouring screen's save-on-leave finishes before the reload. With hash
+  URLs, setting the location doesn't reload, so the guard writes the
+  destination URL and then calls `location.reload()`. This also covers
+  Back and Forward, which xbox-clips-ui had to handle separately.
+- **The known gap**, the same as xbox-clips-ui: an app kept open on one
+  screen across a deploy stays old until its next screen change. This is
+  rare, and there's no prompt to dismiss. If it matters later, add an
+  "update ready" note on the library screen.
+
 ## 4. Data model
 
 ```ts
@@ -460,7 +513,7 @@ testing, not a bug).
 
 Also learned: after a deploy, the first reload still ran the old build.
 The service worker serves the cached version and only switches on the
-next load, so the real app needs an "update ready" prompt (milestone 7).
+next load; section 3.1 covers how the app handles that.
 
 Deferred: testing as an installed app, until after the MVP screens
 exist (owner's call, 2026-11-18). Not run: the 4× CPU-throttled desktop
@@ -574,8 +627,10 @@ code; this covers its project setup and conventions.
 5. **Colour:** the paint tin, the mixer, recent colours.
 6. **C1 theme UI** across all screens, landscape and portrait.
 7. **Finished:** stamp, share sheet, print (coloured or blank),
-   download, PWA install, and an "update ready" prompt when a new
-   version has downloaded (Angular's `SwUpdate`).
+   download, PWA install.
+
+New versions (3.1) are handled in milestone 2, because every device test
+needs them.
 
 After v1, in rough order: tap-to-fill (section 8), more brushes (7),
 photo → line art (12).
