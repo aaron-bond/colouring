@@ -389,10 +389,12 @@ export class Colouring {
     const installed = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches;
     const size = this.docSize();
     const t = this.tuning();
-    const text = this.diagnostics.report('Colouring report', [
+    const device = await deviceLabel();
+    const text = this.diagnostics.report(`Colouring report · ${device}`, [
       [
         'Device',
         [
+          `device: ${device}`,
           `user agent: ${navigator.userAgent}`,
           `screen ${screen.width}×${screen.height} · viewport ${innerWidth}×${innerHeight} · DPR ${devicePixelRatio}`,
           `cores ${navigator.hardwareConcurrency ?? '?'} · device memory ${nav.deviceMemory ?? '?'} GB · touch points ${navigator.maxTouchPoints}`,
@@ -443,6 +445,38 @@ export class Colouring {
   protected setFingersDraw(value: boolean): void {
     this.fingersDraw.set(value);
     this.input.fingersDrawInPenMode = value;
+  }
+}
+
+interface UADataValues {
+  model?: string;
+  platform?: string;
+  platformVersion?: string;
+  fullVersionList?: { brand: string; version: string }[];
+}
+
+// A short name for the device, so reports can be told apart: e.g.
+// "Pixel 8 · Android 15 · Chrome 157 · phone". Chrome's user agent string
+// hides the model ("Android 10; K"), so ask User-Agent Client Hints for it.
+async function deviceLabel(): Promise<string> {
+  const short = Math.min(screen.width, screen.height);
+  const kind = navigator.maxTouchPoints === 0 ? 'desktop' : short < 600 ? 'phone' : 'tablet';
+  const uaData = (navigator as Navigator & {
+    userAgentData?: { getHighEntropyValues(hints: string[]): Promise<UADataValues> };
+  }).userAgentData;
+  try {
+    const v = await uaData!.getHighEntropyValues(['model', 'platform', 'platformVersion', 'fullVersionList']);
+    const chrome = v.fullVersionList?.find((b) => b.brand === 'Google Chrome' || b.brand === 'Chromium');
+    const platform = v.platform ? `${v.platform} ${v.platformVersion?.split('.')[0] ?? ''}`.trim() : '';
+    const browser = chrome ? `Chrome ${chrome.version.split('.')[0]}` : '';
+    return [v.model || 'unknown model', platform, browser, kind].filter(Boolean).join(' · ');
+  } catch {
+    // Safari and Firefox have no client hints: fall back to the string.
+    const ua = navigator.userAgent;
+    const os = /iPad|iPhone|Android [\d.]+|Mac OS X|Windows|Linux/.exec(ua)?.[0] ?? 'unknown OS';
+    const m = /(Version|Firefox|Chrome)\/(\d+)/.exec(ua);
+    const browser = m ? `${m[1] === 'Version' ? 'Safari' : m[1]} ${m[2]}` : '';
+    return [os, browser, kind].filter(Boolean).join(' · ');
   }
 }
 

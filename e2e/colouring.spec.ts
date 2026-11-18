@@ -202,6 +202,8 @@ test.describe('the debug readout', () => {
     await expect(page.getByText(/copied \d+ lines/)).toBeVisible();
     const report = await page.evaluate(() => navigator.clipboard.readText());
     expect(report).toContain('## Device');
+    expect(report).toMatch(/^# Colouring report · .+ · (desktop|tablet|phone) · /);
+    expect(report).toMatch(/\ndevice: .+ · (desktop|tablet|phone)\n/);
     expect(report).toMatch(/stroke pencil by pen · \d+ samples/);
     expect(report).toContain('document 3072×3072');
   });
