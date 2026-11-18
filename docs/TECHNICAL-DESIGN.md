@@ -1,8 +1,8 @@
 # Colouring App: Technical Design (v1)
 
 **Status:** agreed 2026-11-16 (decisions in section 16). The scaffold
-and the device spike (milestone 1) are built; spike results go in
-section 11. Written after the UX first pass
+is built and the device spike (milestone 1) is done; its results are in
+section 11.1. Written after the UX first pass
 and after choosing the C1 "hand-tinted field guide" theme (see
 `CONTEXT.md` section 9). **Photo → line art is deferred:** nothing here
 depends on it, and section 12 notes what would change when it returns.
@@ -139,6 +139,9 @@ taken from the SVG's `viewBox`.
 | I–II (bold, medium) | 2048px | ~17 MB |
 | III–IV (fine, intricate) | 3072px | ~38 MB |
 
+**Confirmed by the spike (11.1):** 3072² draws, pinches and commits
+smoothly on the OnePlus, so these sizes stand.
+
 **Why not 4096?** The OnePlus could likely handle it, but 3072 keeps
 memory modest on mid-range Android tablets. It also stays inside iOS
 Safari's limits (about 16.7M pixels per canvas, with 4096² exactly on
@@ -231,6 +234,12 @@ so adding one is mostly data plus tuning.
 - **Sizes:** 5 presets (as in the mock-ups), defined as a fraction of
   the document's long side so they feel the same at 2048 and 3072.
 - Touch and mouse have no pressure, so they use a fixed mid pressure.
+- **Pressure needs a stronger response than the spike's.** The OnePlus
+  stylus reports 0.05–0.92, but the spike's mapping (radius 35–100%,
+  fixed opacity) made no visible difference. v1 maps pressure to both
+  width and opacity through a tunable curve, tuned on the device. The
+  0.05 floor readings at the start and end of a stroke shouldn't make
+  the ends visibly thinner.
 - **Eraser** draws straight onto the colour layer with `destination-out`
   (as the sample does), so it never touches the lines.
 - **The tool roll in the mock-ups drops to two tools for v1:**
@@ -310,8 +319,15 @@ The colour layer is split into 256×256 tiles.
 - An undo entry is the set of "before" tiles. **Undo** saves the current
   pixels of those tiles as the redo entry, then puts the "before" tiles
   back. **Redo** does the reverse.
-- The stack has a **memory budget** (about 150 MB to start, tuned in the
-  spike). The oldest entries drop first.
+- **Snapshot per dab, not per stroke bounding box.** Only tiles a dab
+  actually lands in are copied. The spike copied the whole bounding box,
+  so one long diagonal stroke cost up to 17.5 MB (11.1).
+- The colour layer is a **CPU-backed canvas**
+  (`getContext('2d', { willReadFrequently: true })`). Copying tiles out
+  of a GPU canvas made commits take up to 100 ms on the OnePlus;
+  CPU-backed, they took 6–13 ms, with no difference in drawing cost.
+- The stack has a **memory budget** of 150 MB (kept after the spike).
+  The oldest entries drop first.
   - A typical stroke touches a few tiles, about 256 KB each, so hundreds
     of steps fit.
   - The worst case, an action that touches every tile, is about 38 MB at
@@ -331,8 +347,8 @@ itself is kept. If that matters later, add a stroke log alongside.
   hidden, and on leaving the colouring screen.
 - **How:** `createImageBitmap(colourCanvas)` is transferred to
   `save.worker.ts`, which encodes it with `OffscreenCanvas.convertToBlob`.
-  PNG encoding of 3072² takes hundreds of milliseconds and must not
-  block drawing.
+  PNG encoding of 3072² took 100 ms on the OnePlus (more on slower
+  tablets) and must not block drawing.
 - **Opening:** the blob is decoded with `createImageBitmap` and drawn
   into the colour layer.
 - **Storage safety:** call `navigator.storage.persist()`. Chrome grants
@@ -432,11 +448,26 @@ stroke stalls for up to 100 ms when it lifts, and 150 MB holds only
 about 25 typical strokes. PNG autosave in a worker is cheap enough to run
 after every stroke.
 
-Still open: the run didn't log the pressure range, so whether pressure
-varies line width usefully is the owner's judgement; how the pen latency
-feels; and the earlier report that Stress ×50 drew nothing visible (the
-first run's paint check found 81–88% of the page painted). Testing as an installed app is deferred until after the MVP
-screens exist (owner's call, 2026-11-18).
+Third run (2026-11-18), stylus, logging the pressure range per stroke:
+light, medium and hard strokes read **0.05–0.43 (average 0.31),
+0.05–0.73 (0.66) and 0.05–0.92 (0.85)**. The stylus reports pressure
+well, but the owner saw no difference in the lines, so the brush's
+pressure response needs strengthening (section 7).
+
+Owner's observations: **no visible pen lag**; the lines stay sharp when
+zoomed in; Stress ×50 works (the earlier blank result was a mistake in
+testing, not a bug).
+
+Also learned: after a deploy, the first reload still ran the old build.
+The service worker serves the cached version and only switches on the
+next load, so the real app needs an "update ready" prompt (milestone 7).
+
+Deferred: testing as an installed app, until after the MVP screens
+exist (owner's call, 2026-11-18). Not run: the 4× CPU-throttled desktop
+check.
+
+**Outcome:** the document-plus-CSS-transform approach holds up; no
+fallback viewport renderer is needed. Decisions 7–10 in section 16.
 
 ## 12. When photo → line art comes back
 
@@ -530,17 +561,21 @@ code; this covers its project setup and conventions.
 
 ## 15. Milestones
 
-1. **Spike on the OnePlus Pad 3** (section 11). Record the results here.
+1. **Spike on the OnePlus Pad 3** (section 11). **Done 2026-11-18**;
+   results in 11.1.
 2. **Engine core:** app scaffold with routes, document and layers,
    viewport zoom/pan, the input state machine, Pencil, Eraser, tile
-   undo/redo. Tested on 2 SVGs, with unstyled UI.
+   undo/redo. Tested on 2 SVGs, with unstyled UI. Keep the spike's
+   copyable diagnostics report as a hidden debug readout, so device
+   results can still be pasted back.
 3. **Persistence:** autosave, reopen, thumbnails, "Specimens in
    progress".
 4. **Library:** catalogue, `check-pictures`, the 5 launch plates.
 5. **Colour:** the paint tin, the mixer, recent colours.
 6. **C1 theme UI** across all screens, landscape and portrait.
 7. **Finished:** stamp, share sheet, print (coloured or blank),
-   download, PWA install.
+   download, PWA install, and an "update ready" prompt when a new
+   version has downloaded (Angular's `SwUpdate`).
 
 After v1, in rough order: tap-to-fill (section 8), more brushes (7),
 photo → line art (12).
@@ -554,7 +589,17 @@ Answered by the owner on 2026-11-16:
 3. **Tap-to-fill:** **deferred** out of v1. The design is kept in
    section 8, including the open choice between "covers" and "goes
    behind" (recommended: goes behind).
-4. **Document sizes:** 2048/3072, confirmed or adjusted by the spike.
+4. **Document sizes:** 2048/3072, confirmed by the spike.
 5. **Launch library:** 5 pictures.
 6. **Navigation:** use the Angular Router (owner's suggestion, for
    organisation), with hash URLs; see section 3.
+
+From the OnePlus spike, 2026-11-18 (section 11.1):
+
+7. **Canvases:** CPU-backed (`willReadFrequently: true`).
+8. **Undo:** snapshot only the tiles each dab touches; budget stays at
+   150 MB.
+9. **Pressure:** the stylus reports it; strengthen the brush response
+   and tune it on the device.
+10. **Viewport:** CSS transform over document-sized canvases, as
+    designed; no fallback renderer.
