@@ -1,4 +1,4 @@
-import { PixelSurface, Rect, TILE, TileHistory } from './history';
+import { PixelSurface, Rect, TILE, TileHistory, tileKeysIn, tileRect } from './history';
 
 // A fake one-byte-per-pixel surface, so tests can check exact values
 // without a canvas (jsdom has none).
@@ -118,5 +118,58 @@ describe('TileHistory', () => {
     history.cancel();
     expect(history.canUndo).toBe(false);
     expect(history.totalBytes).toBe(0);
+  });
+});
+
+describe('tile keys', () => {
+  const size = { width: TILE * 3 - 56, height: TILE * 2 }; // 3 columns, the last one short
+
+  it('lists the tiles a rectangle overlaps, row by row', () => {
+    expect(tileKeysIn({ x: 0, y: 0, width: 1, height: 1 }, size)).toEqual([0]);
+    expect(tileKeysIn({ x: TILE - 1, y: TILE - 1, width: 2, height: 2 }, size)).toEqual([0, 1, 3, 4]);
+  });
+
+  it('clips to the surface', () => {
+    expect(tileKeysIn({ x: -50, y: -50, width: 60, height: 60 }, size)).toEqual([0]);
+    expect(tileKeysIn({ x: size.width - 5, y: size.height - 5, width: 50, height: 50 }, size)).toEqual([5]);
+  });
+
+  it('maps a key back to its rectangle, cut short at the edge', () => {
+    expect(tileRect(4, size)).toEqual({ x: TILE, y: TILE, width: TILE, height: TILE });
+    expect(tileRect(2, size)).toEqual({ x: TILE * 2, y: 0, width: TILE - 56, height: TILE });
+  });
+
+  it('touchTile copies only that tile, once', () => {
+    const surface = new FakeSurface(TILE * 2, TILE * 2);
+    const history = new TileHistory(surface, Infinity);
+    history.begin();
+    history.touchTile(3);
+    history.touchTile(3);
+    surface.paint({ x: TILE, y: TILE, width: TILE, height: TILE }, 9);
+    history.commit();
+    expect(history.totalBytes).toBe(TILE * TILE);
+    history.undo();
+    expect(surface.at(TILE + 5, TILE + 5)).toBe(0);
+  });
+});
+
+describe('rollback', () => {
+  it('puts the touched tiles back and leaves both stacks alone', () => {
+    const surface = new FakeSurface(TILE * 2, TILE);
+    const history = new TileHistory(surface, Infinity);
+    history.begin();
+    history.touch({ x: 0, y: 0, width: 1, height: 1 });
+    surface.paint({ x: 0, y: 0, width: 10, height: 10 }, 1);
+    history.commit();
+    history.undo();
+    expect(history.canRedo).toBe(true);
+
+    history.begin();
+    history.touch({ x: TILE, y: 0, width: 1, height: 1 });
+    surface.paint({ x: TILE, y: 0, width: 10, height: 10 }, 7);
+    history.rollback();
+    expect(surface.at(TILE, 0)).toBe(0);
+    expect(history.canRedo).toBe(true);
+    expect(history.canUndo).toBe(false);
   });
 });

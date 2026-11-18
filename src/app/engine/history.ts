@@ -30,6 +30,35 @@ export interface PixelSurface<T> {
   bytes(pixels: T): number;
 }
 
+export interface Size {
+  width: number;
+  height: number;
+}
+
+// Keys of the tiles that `rect` overlaps, on a surface of `size`. A key
+// is row * columns + column.
+export function tileKeysIn(rect: Rect, size: Size): number[] {
+  const cols = Math.ceil(size.width / TILE);
+  const rows = Math.ceil(size.height / TILE);
+  const x0 = Math.max(0, Math.floor(rect.x / TILE));
+  const y0 = Math.max(0, Math.floor(rect.y / TILE));
+  const x1 = Math.min(cols - 1, Math.floor((rect.x + rect.width - 1) / TILE));
+  const y1 = Math.min(rows - 1, Math.floor((rect.y + rect.height - 1) / TILE));
+  const keys: number[] = [];
+  for (let ty = y0; ty <= y1; ty++) {
+    for (let tx = x0; tx <= x1; tx++) keys.push(ty * cols + tx);
+  }
+  return keys;
+}
+
+// The rectangle a tile key covers, cut short at the surface's edges.
+export function tileRect(key: number, size: Size): Rect {
+  const cols = Math.ceil(size.width / TILE);
+  const x = (key % cols) * TILE;
+  const y = Math.floor(key / cols) * TILE;
+  return { x, y, width: Math.min(TILE, size.width - x), height: Math.min(TILE, size.height - y) };
+}
+
 interface Entry<T> {
   // Tile key -> copy of that tile.
   tiles: Map<number, { rect: Rect; pixels: T }>;
@@ -40,17 +69,12 @@ export class TileHistory<T> {
   private undoStack: Entry<T>[] = [];
   private redoStack: Entry<T>[] = [];
   private current: Entry<T> | null = null;
-  private readonly cols: number;
-  private readonly rows: number;
 
   constructor(
     private readonly surface: PixelSurface<T>,
     // Total bytes kept across the undo and redo stacks.
     private readonly budgetBytes: number,
-  ) {
-    this.cols = Math.ceil(surface.width / TILE);
-    this.rows = Math.ceil(surface.height / TILE);
-  }
+  ) {}
 
   get canUndo(): boolean {
     return this.undoStack.length > 0;
@@ -77,22 +101,18 @@ export class TileHistory<T> {
   // Call before changing pixels inside `rect`: copies every tile it
   // overlaps that this operation hasn't copied yet.
   touch(rect: Rect): void {
+    for (const key of tileKeysIn(rect, this.surface)) this.touchTile(key);
+  }
+
+  // Copies one tile (by key, see tileKeysIn) if this operation hasn't yet.
+  touchTile(key: number): void {
     const entry = this.current;
     if (!entry) throw new Error('TileHistory.touch() outside begin()/commit()');
-    const x0 = Math.max(0, Math.floor(rect.x / TILE));
-    const y0 = Math.max(0, Math.floor(rect.y / TILE));
-    const x1 = Math.min(this.cols - 1, Math.floor((rect.x + rect.width - 1) / TILE));
-    const y1 = Math.min(this.rows - 1, Math.floor((rect.y + rect.height - 1) / TILE));
-    for (let ty = y0; ty <= y1; ty++) {
-      for (let tx = x0; tx <= x1; tx++) {
-        const key = ty * this.cols + tx;
-        if (entry.tiles.has(key)) continue;
-        const tileRect = this.tileRect(tx, ty);
-        const pixels = this.surface.read(tileRect);
-        entry.tiles.set(key, { rect: tileRect, pixels });
-        entry.bytes += this.surface.bytes(pixels);
-      }
-    }
+    if (entry.tiles.has(key)) return;
+    const rect = tileRect(key, this.surface);
+    const pixels = this.surface.read(rect);
+    entry.tiles.set(key, { rect, pixels });
+    entry.bytes += this.surface.bytes(pixels);
   }
 
   commit(): void {
@@ -125,6 +145,15 @@ export class TileHistory<T> {
     return true;
   }
 
+  // Abandons the operation and puts back every tile it touched, leaving
+  // the undo and redo stacks as they were.
+  rollback(): void {
+    const entry = this.current;
+    this.current = null;
+    if (!entry) return;
+    for (const { rect, pixels } of entry.tiles.values()) this.surface.write(pixels, rect.x, rect.y);
+  }
+
   clear(): void {
     this.undoStack = [];
     this.redoStack = [];
@@ -152,17 +181,6 @@ export class TileHistory<T> {
     while (this.totalBytes > this.budgetBytes && this.redoStack.length > 0) {
       this.redoStack.shift();
     }
-  }
-
-  private tileRect(tx: number, ty: number): Rect {
-    const x = tx * TILE;
-    const y = ty * TILE;
-    return {
-      x,
-      y,
-      width: Math.min(TILE, this.surface.width - x),
-      height: Math.min(TILE, this.surface.height - y),
-    };
   }
 }
 
