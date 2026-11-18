@@ -386,8 +386,8 @@ renderer (section 2).
 
 ### 11.1 Results so far (OnePlus Pad 3, Chrome 157, 2026-11-17)
 
-First run, in a Chrome tab (not installed), with fingers only: no pen
-events were recorded. The tablet reports a desktop user agent (X11
+First run, in a Chrome tab (not installed), drawn with a finger on
+purpose (the stylus run comes next). The tablet reports a desktop user agent (X11
 Linux), 8 cores, 8 GB, DPR 2.625, a 1292×734 CSS-pixel viewport and a
 144 Hz display (6.9 ms frames when idle).
 
@@ -416,9 +416,10 @@ What this suggests:
 - Performance leaves room for 3072². The undo budget is the real limit.
 
 Still to check: the stylus (pressure, sample rate, palm rejection), PNG
-encoding, the installed app, and the earlier report that Stress ×50 drew
+encoding, and the earlier report that Stress ×50 drew
 nothing visible (this run's paint check found 81–88% of the page
-painted).
+painted). Testing as an installed app is deferred until after the MVP
+screens exist (owner's call, 2026-11-18).
 
 ## 12. When photo → line art comes back
 
