@@ -415,10 +415,27 @@ What this suggests:
   would leave only a dozen undo steps in 150 MB.
 - Performance leaves room for 3072². The undo budget is the real limit.
 
-Still to check: the stylus (pressure, sample rate, palm rejection), PNG
-encoding, and the earlier report that Stress ×50 drew
-nothing visible (this run's paint check found 81–88% of the page
-painted). Testing as an installed app is deferred until after the MVP
+Second run (2026-11-18), stylus, 3072², GPU canvas (the default):
+
+| Check | Result |
+| --- | --- |
+| Stylus | reported as `pen`; pen mode switched on at the first stroke |
+| Pen input | 228–236 Hz samples, 2 coalesced per event; drawing 0.03–0.06 ms per event |
+| Frames while drawing | 8.3 ms (120 Hz), worst 75 ms (a commit) |
+| Palm rejection | no touch strokes were recorded while pen mode was on; two pinches |
+| Stroke commit, GPU canvas | 0.8–98.6 ms; the slow ones were the long strokes |
+| Undo memory | 8 strokes used 48 MB (up to 17.5 MB for one stroke) |
+| PNG encode, 3072² | 100 ms in the worker, 0 ms on the main thread, 506 KB |
+
+This confirms both suggestions above. At 3072² on the GPU canvas a long
+stroke stalls for up to 100 ms when it lifts, and 150 MB holds only
+about 25 typical strokes. PNG autosave in a worker is cheap enough to run
+after every stroke.
+
+Still open: the run didn't log the pressure range, so whether pressure
+varies line width usefully is the owner's judgement; how the pen latency
+feels; and the earlier report that Stress ×50 drew nothing visible (the
+first run's paint check found 81–88% of the page painted). Testing as an installed app is deferred until after the MVP
 screens exist (owner's call, 2026-11-18).
 
 ## 12. When photo → line art comes back
