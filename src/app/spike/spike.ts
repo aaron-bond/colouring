@@ -112,6 +112,10 @@ export class Spike {
   private stats = {
     pointer: '-',
     pressure: 0,
+    pMin: 1,
+    pMax: 0,
+    pSum: 0,
+    pCount: 0,
     samples: 0,
     events: 0,
     strokeStart: 0,
@@ -398,6 +402,10 @@ export class Spike {
     this.stats.samples = 0;
     this.stats.events = 0;
     this.stats.drawTotal = 0;
+    this.stats.pMin = 1;
+    this.stats.pMax = 0;
+    this.stats.pSum = 0;
+    this.stats.pCount = 0;
     this.stats.strokeStart = performance.now();
     this.carry = 0;
     this.bbox = null;
@@ -405,12 +413,21 @@ export class Spike {
     this.lastDoc = doc;
     if (this.strokeTool === 'eraser') this.history.begin();
     const pressure = this.pressureOf(e);
-    this.stats.pressure = pressure;
+    this.notePressure(pressure);
     this.dab([doc], [pressure]);
   }
 
+  private notePressure(pressure: number): void {
+    const s = this.stats;
+    s.pressure = pressure;
+    s.pMin = Math.min(s.pMin, pressure);
+    s.pMax = Math.max(s.pMax, pressure);
+    s.pSum += pressure;
+    s.pCount++;
+  }
+
   private addPoint(stage: Point, pressure: number): void {
-    this.stats.pressure = pressure;
+    this.notePressure(pressure);
     const to = toDoc(this.view, stage);
     const from = this.lastDoc;
     const r = this.radius(pressure);
@@ -490,6 +507,7 @@ export class Spike {
         `stroke ${this.strokeTool} by ${s.pointer} · ${s.samples} samples / ${s.events} events` +
           ` · ${seconds > 0.05 ? Math.round(s.samples / seconds) : '-'} Hz` +
           ` · draw ${s.events ? (s.drawTotal / s.events).toFixed(2) : '-'} ms/event` +
+          ` · pressure ${s.pMin.toFixed(2)}–${s.pMax.toFixed(2)} (avg ${(s.pSum / Math.max(1, s.pCount)).toFixed(2)})` +
           ` · commit ${s.commitMs.toFixed(1)} ms · undo ${this.undoText()}`,
       );
     }
