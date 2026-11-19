@@ -385,6 +385,7 @@ The colour layer is split into 256×256 tiles.
   (`getContext('2d', { willReadFrequently: true })`). Copying tiles out
   of a GPU canvas made commits take up to 100 ms on the OnePlus;
   CPU-backed, they took 6–13 ms, with no difference in drawing cost.
+  The wet layer is never read back, so it stays on the GPU (decision 11).
 - The stack has a **memory budget** of 150 MB (kept after the spike).
   The oldest entries drop first.
   - A typical stroke touches a few tiles, about 256 KB each, so hundreds
@@ -448,7 +449,8 @@ a PWA. Then record the results in this doc:
   pinch and pan, and whether the SVG stays sharp after a zoom.
 - Stylus input: pressure values, sample rate via `getCoalescedEvents()`,
   and palm rejection (a resting palm never draws once pen mode is on).
-- Pen latency drawing dabs onto the wet layer (target: no visible lag).
+- Pen latency drawing dabs onto the wet layer (target: no visible lag;
+  met once smoothing was off, decision 12).
 - Memory headroom: open, colour and undo a lot without the tab reloading.
 - PNG encoding time in a worker.
 - **A slower-device check:** the OnePlus is a flagship and will hide
@@ -622,7 +624,7 @@ code; this covers its project setup and conventions.
 
 1. **Spike on the OnePlus Pad 3** (section 11). **Done 2026-11-18**;
    results in 11.1.
-2. **Engine core** (built 2026-11-18, awaiting device tuning): app scaffold with routes, document and layers,
+2. **Engine core** (done 2026-11-19, tuned on the OnePlus): app scaffold with routes, document and layers,
    viewport zoom/pan, the input state machine, Pencil, Eraser, tile
    undo/redo. Tested on 2 SVGs, with unstyled UI. Keep the spike's
    copyable diagnostics report as a hidden debug readout, so device
@@ -657,7 +659,8 @@ Answered by the owner on 2026-11-16:
 
 From the OnePlus spike, 2026-11-18 (section 11.1):
 
-7. **Canvases:** CPU-backed (`willReadFrequently: true`).
+7. **Colour layer:** CPU-backed (`willReadFrequently: true`). The wet
+   layer is GPU-backed (decision 11).
 8. **Undo:** snapshot only the tiles each dab touches; budget stays at
    150 MB.
 9. **Pressure:** the stylus reports it; strengthen the brush response
@@ -665,18 +668,22 @@ From the OnePlus spike, 2026-11-18 (section 11.1):
 10. **Viewport:** CSS transform over document-sized canvases, as
     designed; no fallback renderer.
 
-From device testing of milestone 2, 2026-11-18:
+From device testing of milestone 2, 2026-11-18 and 19:
 
-11. **Wet layer backing: on trial.** The line lagged behind the pen. A
-    CPU canvas is copied to the GPU on every frame it changes (up to
-    36 MB for a 3072² page), so the wet layer can now be GPU-backed
-    with a debug switch ("Draw the stroke on the GPU"). The colour
-    layer stays on the CPU for undo readback. With the wet layer on
-    the GPU, a commit redraws the stroke's dabs onto the colour layer
-    instead of copying pixels (copying from a GPU canvas cost up to
-    99 ms in the spike). Source-over is associative, so the result is
-    the same. A brush that composites at stroke opacity (Marker) would
-    need the dabs drawn to a scratch tile first. Pick the default from
-    the tablet's verdict, then remove the switch.
-12. **Path smoothing off** by default; the switch stays in the debug
-    readout.
+11. **Wet layer on the GPU; colour layer on the CPU.** The line lagged
+    behind the pen, and a CPU canvas is copied to the GPU on every
+    frame it changes, so the wet layer was trialled on the GPU behind a
+    debug switch. On the OnePlus both felt the same and both drew at a
+    steady 120 Hz, but lifting the pen cost 1-3 ms on the GPU against
+    8-22 ms on the CPU, so the GPU stays and the switch is gone. The
+    colour layer stays on the CPU for undo readback (decision 7). A
+    commit redraws the stroke's dabs onto the colour layer instead of
+    copying pixels (copying from a GPU canvas cost up to 99 ms in the
+    spike); source-over is associative, so the result is the same. A
+    brush that composites at stroke opacity (Marker) will need its dabs
+    drawn to a scratch tile first.
+12. **Path smoothing off.** It was the real cause of the lag: the
+    one-euro filter made the line trail the pen, and the raw path was
+    steady enough. The switch stays in the debug readout.
+13. **Pencil defaults kept:** width 30-100% and opacity 15-90% with
+    pressure, linear curve.
