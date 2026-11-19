@@ -1,7 +1,7 @@
 import { Component, DestroyRef, computed, inject, input, output, signal } from '@angular/core';
 import { Picture } from '../core/catalogue.service';
 import { canShareFiles, download, fileName, share } from '../core/export';
-import { roman } from '../core/field-guide';
+import { plateLabel, roman } from '../core/field-guide';
 import { Size } from '../engine/viewport';
 
 // The Finished screen (docs/CONTEXT.md 9, theme C1): the plate on the desk
@@ -17,7 +17,7 @@ import { Size } from '../engine/viewport';
     <figure class="plate" [class.portrait]="portraitArt()">
       <span class="tape violet" style="left: -24px; top: -8px; rotate: -30deg"></span>
       <span class="tape yellow" style="right: -24px; top: -8px; rotate: 28deg"></span>
-      <span class="plate-no label"><span>Plate {{ plateNo() }}</span><span>Diff. {{ difficulty() }} · complete</span></span>
+      <span class="plate-no label"><span>{{ plateNo() }}</span><span>{{ picture().plate > 0 ? 'Diff. ' + difficulty() + ' · ' : '' }}complete</span></span>
       @if (imageUrl(); as url) {
         <img [src]="url" [alt]="'Your coloured ' + picture().title" />
       } @else {
@@ -27,7 +27,7 @@ import { Size } from '../engine/viewport';
     </figure>
 
     <div class="card">
-      <span class="label">Plate {{ plateNo() }} · complete</span>
+      <span class="label">{{ plateNo() }} · complete</span>
       <h1 id="finished-title">Lovely work!</h1>
       <p>Save it or share it now: pictures aren't kept in the guide yet.</p>
       <div class="actions">
@@ -237,7 +237,7 @@ export class Finished {
 
   protected readonly canShare = canShareFiles();
   protected readonly status = signal<string | null>(null);
-  protected readonly plateNo = computed(() => roman(this.picture().plate));
+  protected readonly plateNo = computed(() => plateLabel(this.picture().plate));
   protected readonly difficulty = computed(() => roman(this.picture().difficulty));
   protected readonly portraitArt = computed(() => this.size().height > this.size().width);
 

@@ -29,7 +29,7 @@
     <div class="title">
       <span class="name">{{ picture()?.title ?? '…' }}</span>
       @if (picture(); as p) {
-        <span class="sub hand">plate {{ plateNo() }} · {{ p.latinName }}</span>
+        <span class="sub hand">{{ plateNo() }} · {{ p.latinName }}</span>
       }
     </div>
   </div>

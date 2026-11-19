@@ -1,9 +1,11 @@
-import { CATEGORIES, PAINTS, categoryOf, roman, tapeFor } from './field-guide';
+import { CATEGORIES, PAINTS, categoryOf, plateLabel, roman, tapeFor } from './field-guide';
 
 describe('field guide', () => {
   it('writes plate numbers in Roman numerals', () => {
     expect([1, 2, 4, 9, 12, 14, 40, 99].map(roman)).toEqual(['I', 'II', 'IV', 'IX', 'XII', 'XIV', 'XL', 'XCIX']);
     expect(roman(0)).toBe('');
+    expect(plateLabel(4)).toBe('Plate IV');
+    expect(plateLabel(0)).toBe('Blank plate');
   });
 
   it('finds categories by id', () => {

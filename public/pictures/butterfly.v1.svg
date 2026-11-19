@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">
+  <defs>
+    <g id="wing">
+      <path d="M15,-30 C55,-150 190,-215 245,-175 C290,-140 272,-62 228,-22 C180,18 80,16 15,0 Z"/>
+      <path d="M50,-42 C84,-124 166,-164 204,-146 C232,-130 224,-86 196,-62 C160,-34 98,-28 50,-42 Z"/>
+      <circle cx="185" cy="-118" r="22"/>
+      <circle cx="122" cy="-80" r="13"/>
+      <circle cx="238" cy="-146" r="7"/>
+      <circle cx="248" cy="-104" r="6"/>
+      <path d="M15,12 C90,18 188,40 210,108 C226,166 172,212 122,192 C80,176 42,124 15,44 Z"/>
+      <path d="M150,112 C176,108 190,132 178,152 C166,170 138,164 134,142 C130,126 138,114 150,112 Z"/>
+      <path d="M44,40 C80,52 106,80 112,112"/>
+    </g>
+  </defs>
+  <g fill="none" stroke="#3A2E22" stroke-width="3.4" stroke-linejoin="round" stroke-linecap="round">
+    <use href="#wing" transform="translate(300 292)"/>
+    <use href="#wing" transform="translate(300 292) scale(-1 1)"/>
+    <ellipse cx="300" cy="305" rx="15" ry="100"/>
+    <circle cx="300" cy="186" r="19"/>
+    <path d="M287,250 Q300,258 313,250 M286,290 Q300,298 314,290 M287,330 Q300,338 313,330 M289,368 Q300,375 311,368"/>
+    <path d="M292,170 C282,120 262,92 236,84"/>
+    <circle cx="229" cy="82" r="8"/>
+    <path d="M308,170 C318,120 338,92 364,84"/>
+    <circle cx="371" cy="82" r="8"/>
+    <circle cx="70" cy="513.6" r="13.6"/>
+    <circle cx="95.1" cy="531.8" r="13.6"/>
+    <circle cx="85.5" cy="561.4" r="13.6"/>
+    <circle cx="54.5" cy="561.4" r="13.6"/>
+    <circle cx="44.9" cy="531.8" r="13.6"/>
+    <circle cx="70" cy="540" r="11"/>
+    <circle cx="530" cy="513.6" r="13.6"/>
+    <circle cx="555.1" cy="531.8" r="13.6"/>
+    <circle cx="545.5" cy="561.4" r="13.6"/>
+    <circle cx="514.5" cy="561.4" r="13.6"/>
+    <circle cx="504.9" cy="531.8" r="13.6"/>
+    <circle cx="530" cy="540" r="11"/>
+    <circle cx="60" cy="50.8" r="9.9"/>
+    <circle cx="78.3" cy="64.1" r="9.9"/>
+    <circle cx="71.3" cy="85.5" r="9.9"/>
+    <circle cx="48.7" cy="85.5" r="9.9"/>
+    <circle cx="41.7" cy="64.1" r="9.9"/>
+    <circle cx="60" cy="70" r="8"/>
+    <circle cx="545" cy="40.8" r="9.9"/>
+    <circle cx="563.3" cy="54.1" r="9.9"/>
+    <circle cx="556.3" cy="75.5" r="9.9"/>
+    <circle cx="533.7" cy="75.5" r="9.9"/>
+    <circle cx="526.7" cy="54.1" r="9.9"/>
+    <circle cx="545" cy="60" r="8"/>
+  </g>
+</svg>

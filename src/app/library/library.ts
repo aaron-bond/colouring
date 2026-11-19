@@ -1,7 +1,7 @@
 import { Component, computed, inject, input, resource } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CatalogueService, Picture } from '../core/catalogue.service';
-import { CATEGORIES, PAINTS, categoryOf, roman, tapeFor, tiltFor } from '../core/field-guide';
+import { BLANK_WASH, CATEGORIES, PAINTS, categoryOf, plateLabel, roman, tapeFor, tiltFor } from '../core/field-guide';
 
 // The library (TECHNICAL-DESIGN.md 3; docs/CONTEXT.md 9, theme C1): the
 // field guide open on the desk. In landscape it's a two-page spread, the
@@ -18,7 +18,7 @@ const TITLE_COLOURS = ['#D6336C', '#F08C00', '#2F9E44', '#1C7ED6', '#7048E8'];
   template: `
     <div class="desk">
       <div class="book">
-        <section class="page intro" aria-labelledby="guide-title">
+        <section class="leaf intro" aria-labelledby="guide-title">
           <span class="label">Vol. I · {{ month }}</span>
           <h1 id="guide-title">
             A Field Guide to Things Worth
@@ -39,7 +39,7 @@ const TITLE_COLOURS = ['#D6336C', '#F08C00', '#2F9E44', '#1C7ED6', '#7048E8'];
           </div>
         </section>
 
-        <section class="page plates" aria-labelledby="plates-title">
+        <section class="leaf plates" aria-labelledby="plates-title">
           <header>
             <h2 id="plates-title">{{ heading() }}</h2>
             <span class="hand key">difficulty: I bold · IV intricate</span>
@@ -52,12 +52,16 @@ const TITLE_COLOURS = ['#D6336C', '#F08C00', '#2F9E44', '#1C7ED6', '#7048E8'];
                     class="plate"
                     [routerLink]="['/colour/new', p.id]"
                     [style.rotate.deg]="tilt(p)"
-                    [attr.aria-label]="p.title + ', plate ' + roman(p.plate) + ', difficulty ' + roman(p.difficulty)"
+                    [attr.aria-label]="ariaLabel(p)"
                   >
                     <span class="tape" [class]="tape(p)"></span>
-                    <span class="plate-no label"><span>Plate {{ roman(p.plate) }}</span><span>{{ roman(p.difficulty) }}</span></span>
+                    <span class="plate-no label"><span>{{ plateLabel(p.plate) }}</span><span>{{ p.plate > 0 ? roman(p.difficulty) : '' }}</span></span>
                     <span class="wash" [style.--wash]="wash(p)">
-                      <img [src]="p.svg" alt="" loading="lazy" draggable="false" />
+                      @if (p.plate > 0) {
+                        <img [src]="p.svg" alt="" loading="lazy" draggable="false" />
+                      } @else {
+                        <span class="blank hand" aria-hidden="true">draw anything</span>
+                      }
                     </span>
                     <span class="latin">{{ p.latinName }}</span>
                   </a>
@@ -109,7 +113,7 @@ const TITLE_COLOURS = ['#D6336C', '#F08C00', '#2F9E44', '#1C7ED6', '#7048E8'];
       box-shadow: 0 18px 40px rgb(0 0 0 / 35%);
       border-radius: 6px;
     }
-    .page {
+    .leaf {
       display: flex;
       flex-direction: column;
       box-sizing: border-box;
@@ -245,6 +249,19 @@ const TITLE_COLOURS = ['#D6336C', '#F08C00', '#2F9E44', '#1C7ED6', '#7048E8'];
       height: 88%;
       object-fit: contain;
     }
+    .blank {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 70%;
+      height: 62%;
+      background: var(--page);
+      box-shadow: 0 1px 4px rgb(58 46 34 / 18%);
+      color: var(--ink-soft);
+      font-size: 24px;
+      rotate: -2deg;
+    }
     .latin {
       font: italic 500 18px var(--serif);
       text-align: center;
@@ -334,6 +351,7 @@ export class Library {
   protected readonly month = MONTHS[new Date().getMonth()];
   protected readonly titleLetters = [...'Colouring'].map((char, i) => ({ char, colour: TITLE_COLOURS[i % TITLE_COLOURS.length] }));
   protected readonly roman = roman;
+  protected readonly plateLabel = plateLabel;
 
   // Only sections that have plates get a tab.
   protected readonly categories = computed(() => {
@@ -358,6 +376,12 @@ export class Library {
   }
 
   protected wash(p: Picture): string {
-    return categoryOf(p.category)?.wash ?? '#3BB3A0';
+    return categoryOf(p.category)?.wash ?? BLANK_WASH;
+  }
+
+  protected ariaLabel(p: Picture): string {
+    const parts = [p.title, plateLabel(p.plate).toLowerCase()];
+    if (p.plate > 0) parts.push(`difficulty ${roman(p.difficulty)}`);
+    return parts.join(', ');
   }
 }

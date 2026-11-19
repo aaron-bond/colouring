@@ -1,6 +1,17 @@
 {
   "pictures": [
     {
+      "id": "blank",
+      "version": 1,
+      "title": "Blank page",
+      "latinName": "Tabula rasa",
+      "plate": 0,
+      "category": "blank",
+      "difficulty": 1,
+      "svg": "pictures/blank.v1.svg",
+      "docLongSide": 2048
+    },
+    {
       "id": "lotus-mandala",
       "version": 1,
       "title": "Lotus mandala",
@@ -20,6 +31,39 @@
       "category": "plants",
       "difficulty": 1,
       "svg": "pictures/tulips.v1.svg",
+      "docLongSide": 2048
+    },
+    {
+      "id": "butterfly",
+      "version": 1,
+      "title": "Butterfly",
+      "latinName": "Papilio pingenda",
+      "plate": 3,
+      "category": "animals",
+      "difficulty": 2,
+      "svg": "pictures/butterfly.v1.svg",
+      "docLongSide": 2048
+    },
+    {
+      "id": "princess-castle",
+      "version": 1,
+      "title": "Princess castle",
+      "latinName": "Castellum regale",
+      "plate": 4,
+      "category": "places",
+      "difficulty": 2,
+      "svg": "pictures/princess-castle.v1.svg",
+      "docLongSide": 2048
+    },
+    {
+      "id": "moon-and-stars",
+      "version": 1,
+      "title": "Moon and stars",
+      "latinName": "Luna somnians",
+      "plate": 5,
+      "category": "patterns",
+      "difficulty": 1,
+      "svg": "pictures/moon-and-stars.v1.svg",
       "docLongSide": 2048
     }
   ]

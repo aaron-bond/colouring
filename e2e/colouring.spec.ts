@@ -81,6 +81,25 @@ test('the library lists the pictures and opens one', async ({ page }) => {
   expect(size).toEqual([1536, 2048]);
 });
 
+test('every picture in the catalogue opens at its document size', async ({ page }) => {
+  const expected: Record<string, [number, number]> = {
+    'lotus-mandala': [3072, 3072],
+    tulips: [1536, 2048],
+    butterfly: [2048, 2048],
+    'princess-castle': [1536, 2048],
+    'moon-and-stars': [2048, 1536],
+    blank: [2048, 1536],
+  };
+  for (const [id, size] of Object.entries(expected)) {
+    // Tap the plate in the library, as in the app: going straight from
+    // one picture's URL to another's would keep the same screen.
+    await page.goto('');
+    await page.locator(`a.plate[href$="/colour/new/${id}"]`).click();
+    await expect(page.locator('.page')).toHaveClass(/ready/);
+    expect(await page.locator('canvas.colour').evaluate((c: HTMLCanvasElement) => [c.width, c.height])).toEqual(size);
+  }
+});
+
 test('the index tabs filter the plates', async ({ page }) => {
   await page.goto('');
   await expect(page.getByRole('link', { name: /Tulips/ })).toBeVisible();

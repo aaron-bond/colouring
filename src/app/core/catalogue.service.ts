@@ -8,7 +8,8 @@ export interface Picture {
   title: string;
   latinName: string;
   plate: number;
-  category: 'animals' | 'plants' | 'mandalas' | 'patterns' | 'places';
+  // 'blank' is the blank page (plate 0): no index tab, listed first.
+  category: 'animals' | 'plants' | 'mandalas' | 'patterns' | 'places' | 'blank';
   difficulty: 1 | 2 | 3 | 4;
   svg: string;
   docLongSide: number;

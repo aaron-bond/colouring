@@ -3,7 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AppUpdates } from '../core/app-updates';
 import { CatalogueService, Picture, documentSize } from '../core/catalogue.service';
 import { flatten } from '../core/export';
-import { DEFAULT_PAINT, PAINTS, Paint, roman } from '../core/field-guide';
+import { DEFAULT_PAINT, PAINTS, Paint, plateLabel } from '../core/field-guide';
 import { BrushId, ERASER, FIXED_PRESSURE, PENCIL, SIZE_FRACTIONS } from '../engine/brush';
 import { Diagnostics, megabytes } from '../engine/diagnostics';
 import { DEFAULT_HAPTICS, HapticCall, HapticSettings, HapticStroke } from '../engine/haptics';
@@ -55,7 +55,7 @@ export class Colouring {
   protected readonly dotSizes = DOT_SIZES;
   protected readonly paints = PAINTS;
   protected readonly paint = signal<Paint>(DEFAULT_PAINT);
-  protected readonly plateNo = computed(() => roman(this.picture()?.plate ?? 0));
+  protected readonly plateNo = computed(() => plateLabel(this.picture()?.plate ?? 0).toLowerCase());
   protected readonly zoomPercent = signal(100);
   protected readonly finishedOpen = signal(false);
   protected readonly finishedPng = signal<Blob | null>(null);

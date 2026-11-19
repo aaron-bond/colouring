@@ -644,7 +644,10 @@ first, then the utilities, then more pictures.
    progress"; Finished becomes its own route with the stamp.
 5. **Colour and tools:** the mixer, more palettes, recent colours; more
    brushes one at a time.
-6. **Library content:** `check-pictures`, the 5 launch plates.
+6. **Library content:** `check-pictures`, the 5 launch plates. Started
+   early on request (2026-11-19): a butterfly, a princess castle, a moon
+   and stars, and a blank page ("Tabula rasa", plate 0: no number or
+   difficulty, no index tab, listed first).
 7. **The rest of Finished:** print (coloured or blank), PWA install.
 
 New versions (3.1) were handled in milestone 2, because every device

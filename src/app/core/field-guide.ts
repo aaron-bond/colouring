@@ -61,6 +61,14 @@ export function tiltFor(plate: number): number {
   return [-1.2, 1, 0.8, -0.8, 0.5, -0.5][plate % 6];
 }
 
+// "Plate IV", or "Blank plate" for the blank page (plate 0).
+export function plateLabel(plate: number): string {
+  return plate > 0 ? `Plate ${roman(plate)}` : 'Blank plate';
+}
+
+// The blank page's wash: plain paper-brown, no category colour.
+export const BLANK_WASH = '#C9B99A';
+
 export function roman(n: number): string {
   if (n <= 0) return '';
   const table: [number, string][] = [
