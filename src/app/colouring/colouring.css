@@ -298,6 +298,34 @@ svg {
   outline-offset: 2px;
 }
 
+/* ---- Diagnostics gear (always shown for now) ---------------------------- */
+
+.gear {
+  position: absolute;
+  left: max(var(--gap), env(safe-area-inset-left));
+  bottom: max(var(--gap), env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 28%);
+  color: var(--paper);
+  cursor: pointer;
+}
+
+.gear[aria-pressed='true'] {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.gear svg {
+  stroke-width: 1.8;
+}
+
 /* ---- Leave dialog ------------------------------------------------------- */
 
 .leave {

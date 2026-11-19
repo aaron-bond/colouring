@@ -65,8 +65,8 @@ async function stageCentre(page: Page): Promise<[number, number]> {
   return [box.width / 2, box.height / 2];
 }
 
-async function open(page: Page, pictureId: string, query = '') {
-  await page.goto(`#/colour/new/${pictureId}${query}`);
+async function open(page: Page, pictureId: string) {
+  await page.goto(`#/colour/new/${pictureId}`);
   await expect(page.locator('.page')).toHaveClass(/ready/);
   await expect(page.locator('.page')).toHaveAttribute('style', /scale/);
 }
@@ -253,15 +253,21 @@ test.describe('on the colouring screen', () => {
 });
 
 test.describe('the debug readout', () => {
-  test('is hidden unless asked for', async ({ page }) => {
+  test('is hidden until the gear is tapped', async ({ page }) => {
     await open(page, 'lotus-mandala');
-    await expect(page.getByRole('button', { name: 'Copy diagnostics report' })).toHaveCount(0);
+    const readout = page.getByRole('button', { name: 'Copy diagnostics report' });
+    await expect(readout).toHaveCount(0);
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+    await expect(readout).toBeVisible();
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
+    await expect(readout).toHaveCount(0);
   });
 
   test('copies a report that logs strokes', async ({ page, context, browserName }) => {
     test.skip(browserName !== 'chromium', 'clipboard permissions are Chromium-only in Playwright');
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-    await open(page, 'lotus-mandala', '?debug=1');
+    await open(page, 'lotus-mandala');
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
     const [cx, cy] = await stageCentre(page);
     await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy], 0.4);
     await page.getByRole('button', { name: 'Copy diagnostics report' }).click();
@@ -275,7 +281,8 @@ test.describe('the debug readout', () => {
   });
 
   test('a long diagonal stroke only stores the tiles it crosses', async ({ page }) => {
-    await open(page, 'lotus-mandala', '?debug=1');
+    await open(page, 'lotus-mandala');
+    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
     const box = (await page.locator('.stage').boundingBox())!;
     const pageBox = (await page.locator('.page').boundingBox())!;
     const from: [number, number] = [pageBox.x - box.x + 10, pageBox.y - box.y + 10];

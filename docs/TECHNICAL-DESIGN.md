@@ -75,7 +75,7 @@ src/app/
   app.config.ts           router (hash URLs, input binding), service worker
   library/                Library screen: plates, index tabs, in-progress
   colouring/              Colouring screen: stage, tool roll, paint tin, mixer
-    debug-readout.ts      hidden diagnostics and pencil tuning (?debug=1)
+    debug-readout.ts      diagnostics and pencil tuning, behind the gear
   finished/               Finished screen: stamp, save/share/print
                           (an overlay on Colouring until saving arrives)
   core/
@@ -652,6 +652,14 @@ test needs them.
 
 After v1, in rough order: tap-to-fill (section 8), more brushes (7),
 photo → line art (12).
+
+To look into later (owner's idea, 2026-11-19): **haptics while drawing
+with the pen**, a light vibration that makes the stroke feel like pencil
+on paper. To check: whether the web can drive it at all. Chrome on
+Android has `navigator.vibrate()`, but it drives the tablet's own motor,
+needs a recent tap first, and only takes on/off durations, so a paper
+"grain" may feel buzzy rather than textured. A stylus's own haptics
+aren't exposed to the web. A test on the OnePlus would settle it.
 
 ## 16. Decisions
 

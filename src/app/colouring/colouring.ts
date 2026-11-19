@@ -18,7 +18,6 @@ import { DebugReadout, PencilTuning, ReadoutLine } from './debug-readout';
 // transform up to date. "Finished" opens over it (see finished.ts), and
 // leaving with colour on the page asks first, as nothing is saved yet.
 
-const DEBUG_KEY = 'colouring.debug';
 // Room left between the controls and a fitted page.
 const FIT_GAP = 12;
 // The size presets' dots on the tool roll, in px.
@@ -33,7 +32,6 @@ const DOT_SIZES = [6, 10, 14, 20, 26];
 export class Colouring {
   // Route parameters (component input binding).
   readonly pictureId = input.required<string>();
-  readonly debug = input<string>();
 
   private readonly stageRef = viewChild.required<ElementRef<HTMLDivElement>>('stage');
   private readonly pageRef = viewChild.required<ElementRef<HTMLDivElement>>('page');
@@ -99,7 +97,6 @@ export class Colouring {
   constructor() {
     const destroyRef = inject(DestroyRef);
     afterNextRender(() => {
-      this.showDebug.set(this.debugEnabled());
       const stageEl = this.stageRef().nativeElement;
       const resize = new ResizeObserver(() => this.measureStage());
       resize.observe(stageEl);
@@ -130,7 +127,9 @@ export class Colouring {
       };
       raf = requestAnimationFrame(frame);
       const readoutTimer = setInterval(() => this.showDebug() && this.updateReadout(), 250);
-      const snapshotTimer = setInterval(() => this.showDebug() && !document.hidden && this.snapshot(), 5000);
+      // Snapshots run with the readout closed too, so opening it later
+      // still has the history.
+      const snapshotTimer = setInterval(() => !document.hidden && this.snapshot(), 5000);
 
       destroyRef.onDestroy(() => {
         resize.disconnect();
@@ -432,15 +431,11 @@ export class Colouring {
 
   // ---- Diagnostics ---------------------------------------------------------
 
-  private debugEnabled(): boolean {
-    try {
-      const requested = this.debug();
-      if (requested === '1') localStorage.setItem(DEBUG_KEY, '1');
-      if (requested === '0') localStorage.removeItem(DEBUG_KEY);
-      return localStorage.getItem(DEBUG_KEY) === '1';
-    } catch {
-      return this.debug() === '1';
-    }
+  // The gear in the bottom-left corner. Always shown for now; it will
+  // move behind a build setting.
+  protected toggleDebug(): void {
+    this.showDebug.update((on) => !on);
+    if (this.showDebug()) this.updateReadout();
   }
 
   private undoText(): string {

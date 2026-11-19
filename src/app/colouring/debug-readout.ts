@@ -1,8 +1,8 @@
 import { Component, input, model, output, signal } from '@angular/core';
 
-// The hidden debug readout (TECHNICAL-DESIGN.md 15, milestone 2), carried
-// over from the spike. Open the colouring screen with ?debug=1 to show it
-// (remembered on the device; ?debug=0 hides it). Tapping the readout
+// The debug readout (TECHNICAL-DESIGN.md 15, milestone 2), carried over
+// from the spike. The gear in the colouring screen's bottom-left corner
+// shows and hides it. Tapping the readout
 // copies a plain-text report to paste back from the tablet. The controls
 // tune the pencil live on the device.
 

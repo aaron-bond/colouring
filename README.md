@@ -43,10 +43,9 @@ plain `http://<your-ip>:4200` is only a partial test. Better options:
 
 ### Diagnostics on the tablet
 
-Open a picture with `?debug=1` on the end of its URL (for example
-`…/colouring/#/colour/new/tulips?debug=1`) to show a readout and pencil
-tuning controls. The setting is remembered on the device; `?debug=0`
-hides it again. Tap the readout to copy a plain-text report (device,
+On the colouring screen, tap the gear in the bottom-left corner to show
+a readout and pencil tuning controls (for now the gear is always there;
+it will move behind a build setting). Tap the readout to copy a plain-text report (device,
 settings, every stroke's input rate and pressure range, frame times,
 undo memory) to paste into a bug report or a chat.
 
