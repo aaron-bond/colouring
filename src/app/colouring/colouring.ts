@@ -6,6 +6,7 @@ import { flatten } from '../core/export';
 import { DEFAULT_PAINT, PAINTS, Paint, roman } from '../core/field-guide';
 import { BrushId, ERASER, FIXED_PRESSURE, PENCIL, SIZE_FRACTIONS } from '../engine/brush';
 import { Diagnostics, megabytes } from '../engine/diagnostics';
+import { DEFAULT_HAPTICS, HapticCall, HapticSettings, HapticStroke } from '../engine/haptics';
 import { ColourDocument } from '../engine/document';
 import { InputAction, InputMachine, PointerSample } from '../engine/input';
 import { PointSmoother } from '../engine/smoothing';
@@ -58,6 +59,8 @@ export class Colouring {
   protected readonly zoomPercent = signal(100);
   protected readonly finishedOpen = signal(false);
   protected readonly finishedPng = signal<Blob | null>(null);
+  // The haptics spike: tuned from the diagnostics panel.
+  protected readonly haptics = signal<HapticSettings>(DEFAULT_HAPTICS);
   protected readonly canUndo = signal(false);
   protected readonly canRedo = signal(false);
   protected readonly showDebug = signal(false);
@@ -93,6 +96,11 @@ export class Colouring {
   // Leaving was already confirmed (from the Finished screen).
   private leaving = false;
   private resolveLeave: ((leave: boolean) => void) | null = null;
+  // The pen stroke's haptics, and where the pen last was on screen.
+  private haptic: HapticStroke | null = null;
+  private hapticAt: Point | null = null;
+  private lastHapticPulses = 0;
+  private lastVibrate = 'not called';
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -123,6 +131,7 @@ export class Colouring {
         this.diagnostics.frame(now - last, !document.hidden);
         last = now;
         if (this.viewDirty) this.applyView();
+        if (this.haptic) this.vibrate(this.haptic.idle(now));
         raf = requestAnimationFrame(frame);
       };
       raf = requestAnimationFrame(frame);
@@ -245,6 +254,7 @@ export class Colouring {
           const pressure = this.pressureOf(s);
           doc.beginStroke(brush, this.paint().hex, this.sizeIndex(), this.toDocPoint(s), pressure);
           this.diagnostics.strokeStart(s.kind, this.tool(), pressure);
+          this.startHaptics(s);
           break;
         }
         case 'stroke-move': {
@@ -252,11 +262,13 @@ export class Colouring {
           const pressures = action.samples.map((s) => this.pressureOf(s));
           doc.extendStroke(action.samples.map((s, i) => ({ at: this.toDocPoint(s), pressure: pressures[i] })));
           this.diagnostics.strokeEvent(pressures, performance.now() - t0);
+          this.moveHaptics(action.samples, pressures);
           break;
         }
         case 'stroke-end': {
           const t0 = performance.now();
           doc.endStroke();
+          this.endHaptics();
           this.dirty = true;
           this.diagnostics.strokeEnd('committed', performance.now() - t0, this.undoText());
           this.refreshHistory();
@@ -264,6 +276,7 @@ export class Colouring {
         }
         case 'stroke-cancel':
           doc.cancelStroke();
+          this.endHaptics();
           this.diagnostics.strokeEnd('cancelled', 0, this.undoText());
           break;
         case 'pinch-start':
@@ -449,6 +462,7 @@ export class Colouring {
     const memory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
     return [
       { label: 'pen mode', value: this.input.penMode ? 'on' : 'off' },
+      { label: 'haptics', value: `${this.haptics().mode} · ${this.lastHapticPulses} pulses last stroke · vibrate ${this.lastVibrate}` },
       { label: 'stroke', value: s ? `${s.tool} by ${s.kind} · ${s.hz ?? '-'} Hz · ${s.samples} samples` : '-' },
       { label: 'pressure', value: s ? `${s.pressureMin.toFixed(2)}–${s.pressureMax.toFixed(2)} (avg ${s.pressureAvg.toFixed(2)})` : '-' },
       { label: 'draw', value: s?.drawMsPerEvent != null ? `${s.drawMsPerEvent.toFixed(2)} ms/event` : '-' },
@@ -493,6 +507,7 @@ export class Colouring {
         [
           `picture ${this.picture()?.id ?? '-'} · document ${size ? `${size.width}×${size.height}` : '-'}`,
           `tool ${this.tool()} · size ${this.sizeIndex() + 1} · colour ${this.paint().name} ${this.paint().hex}`,
+          `haptics ${JSON.stringify(this.haptics())} · vibrate supported ${'vibrate' in navigator}`,
           `fingers draw in pen mode ${this.fingersDraw()} · smoothing ${this.smoothing()}`,
           `pencil: width at no pressure ${t.sizeMin} · opacity ${t.opacityMin}–${t.opacityMax} · curve ${t.gamma}`,
         ],
@@ -506,6 +521,47 @@ export class Colouring {
 
   protected clearLog(): void {
     this.diagnostics.clear();
+  }
+
+  // ---- Haptics spike ---------------------------------------------------------
+
+  private startHaptics(s: PointerSample): void {
+    // Pen strokes only: the idea is a pen that feels like it's on paper.
+    this.haptic = s.kind === 'pen' && this.haptics().mode !== 'off' ? new HapticStroke(this.haptics()) : null;
+    this.hapticAt = { x: s.x, y: s.y };
+  }
+
+  private moveHaptics(samples: PointerSample[], pressures: number[]): void {
+    const haptic = this.haptic;
+    if (!haptic || !this.hapticAt) return;
+    samples.forEach((s, i) => {
+      const travelled = Math.hypot(s.x - this.hapticAt!.x, s.y - this.hapticAt!.y);
+      this.hapticAt = { x: s.x, y: s.y };
+      this.vibrate(haptic.move(travelled, pressures[i], s.time));
+    });
+  }
+
+  private endHaptics(): void {
+    if (!this.haptic) return;
+    this.vibrate(this.haptic.end());
+    this.lastHapticPulses = this.haptic.pulses;
+    this.haptic = null;
+  }
+
+  private vibrate(call: HapticCall): void {
+    if (call === null) return;
+    if (!('vibrate' in navigator)) {
+      this.lastVibrate = 'unsupported';
+      return;
+    }
+    // false: blocked (no tap on the page yet) or no motor.
+    this.lastVibrate = navigator.vibrate(call) ? 'ok' : 'refused';
+  }
+
+  protected testVibration(): void {
+    this.vibrate(300);
+    this.diagnostics.log(`test vibration: ${this.lastVibrate}`);
+    this.updateReadout();
   }
 
   protected setFingersDraw(value: boolean): void {

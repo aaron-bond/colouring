@@ -661,6 +661,16 @@ needs a recent tap first, and only takes on/off durations, so a paper
 "grain" may feel buzzy rather than textured. A stylus's own haptics
 aren't exposed to the web. A test on the OnePlus would settle it.
 
+**Spike built 2026-11-19** (`engine/haptics.ts`, controls in the gear's
+Tuning panel, off by default): pen strokes only, in two modes. *Grain*
+sends a short pulse every few pixels of pen travel on screen (pulse
+length, spacing and a pressure link are adjustable), and never sends a
+pulse before the last one has finished, since a new `vibrate()` call
+cuts the old one short. *Buzz* runs one vibration while the pen moves
+and stops it 60 ms after the pen rests or lifts. "Test vibration"
+checks the motor answers at all; the report records whether
+`vibrate()` was accepted or refused.
+
 ## 16. Decisions
 
 Answered by the owner on 2026-11-16:

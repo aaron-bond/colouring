@@ -1,4 +1,5 @@
 import { Component, input, model, output, signal } from '@angular/core';
+import { HapticMode, HapticSettings } from '../engine/haptics';
 
 // The debug readout (TECHNICAL-DESIGN.md 15, milestone 2), carried over
 // from the spike. The gear in the colouring screen's bottom-left corner
@@ -51,6 +52,27 @@ export interface PencilTuning {
             Pressure curve {{ tuning().gamma.toFixed(2) }} (lower reaches full sooner)
             <input type="range" min="0.3" max="2" step="0.05" [value]="tuning().gamma" (input)="tune('gamma', $event)" />
           </label>
+          <fieldset>
+            <legend>Pen haptics (spike)</legend>
+            <div class="modes" role="radiogroup" aria-label="Haptics">
+              @for (m of modes; track m) {
+                <label><input type="radio" name="haptic-mode" [checked]="haptics().mode === m" (change)="setHaptic('mode', m)" /> {{ m }}</label>
+              }
+            </div>
+            <label>
+              Pulse length {{ haptics().pulseMs }} ms
+              <input type="range" min="1" max="40" step="1" [value]="haptics().pulseMs" (input)="setHaptic('pulseMs', num($event))" />
+            </label>
+            <label>
+              Pulse every {{ haptics().spacingPx }} px of travel
+              <input type="range" min="2" max="60" step="1" [value]="haptics().spacingPx" (input)="setHaptic('spacingPx', num($event))" />
+            </label>
+            <label
+              ><input type="checkbox" [checked]="haptics().pressureScales" (change)="setHaptic('pressureScales', !haptics().pressureScales)" /> Longer
+              pulses when pressing harder</label
+            >
+            <button type="button" (click)="testVibration.emit()">Test vibration</button>
+          </fieldset>
           <button type="button" (click)="clear.emit()">Clear log</button>
         </div>
       }
@@ -68,6 +90,8 @@ export interface PencilTuning {
       align-items: flex-end;
       gap: 8px;
       max-width: min(440px, calc(100% - 24px));
+      max-height: calc(100% - 24px);
+      overflow-y: auto;
       font: 12px/1.4 ui-monospace, monospace;
       color: #fff;
     }
@@ -110,6 +134,25 @@ export interface PencilTuning {
       align-items: center;
       gap: 8px;
     }
+    fieldset {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 0;
+      padding: 8px 10px 10px;
+      border: 1px solid rgb(255 255 255 / 25%);
+      border-radius: 8px;
+    }
+    .modes {
+      display: flex;
+      gap: 14px;
+    }
+    .modes label {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      min-height: 32px;
+    }
     input[type='range'] {
       width: 100%;
       min-height: 32px;
@@ -134,12 +177,24 @@ export class DebugReadout {
   readonly fingersDraw = model.required<boolean>();
   readonly smoothing = model.required<boolean>();
   readonly tuning = model.required<PencilTuning>();
+  readonly haptics = model.required<HapticSettings>();
+  readonly testVibration = output<void>();
   readonly copy = output<void>();
   readonly clear = output<void>();
   protected readonly open = signal(false);
 
   protected pct(v: number): string {
     return `${Math.round(v * 100)}%`;
+  }
+
+  protected readonly modes: HapticMode[] = ['off', 'grain', 'buzz'];
+
+  protected setHaptic<K extends keyof HapticSettings>(key: K, value: HapticSettings[K]): void {
+    this.haptics.set({ ...this.haptics(), [key]: value });
+  }
+
+  protected num(event: Event): number {
+    return Number((event.target as HTMLInputElement).value);
   }
 
   protected tune(key: keyof PencilTuning, event: Event): void {
