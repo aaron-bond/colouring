@@ -99,7 +99,7 @@ export class AppUpdates {
 
 // The root route's guard: Angular runs it after the current screen's
 // canDeactivate guards, so the screen being left has finished (and, from
-// milestone 3, saved) before the reload.
+// milestone 4, saved) before the reload.
 export const switchToNewVersion: CanActivateChildFn = async (_route, state) => {
   const router = inject(Router);
   const popped = router.currentNavigation()?.trigger === 'popstate';

@@ -1,26 +1,32 @@
-import { Component, DestroyRef, ElementRef, afterNextRender, inject, input, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, computed, inject, input, signal, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AppUpdates } from '../core/app-updates';
 import { CatalogueService, Picture, documentSize } from '../core/catalogue.service';
+import { flatten } from '../core/export';
+import { DEFAULT_PAINT, PAINTS, Paint, roman } from '../core/field-guide';
 import { BrushId, ERASER, FIXED_PRESSURE, PENCIL, SIZE_FRACTIONS } from '../engine/brush';
 import { Diagnostics, megabytes } from '../engine/diagnostics';
 import { ColourDocument } from '../engine/document';
 import { InputAction, InputMachine, PointerSample } from '../engine/input';
 import { PointSmoother } from '../engine/smoothing';
-import { Point, Size, View, clampPan, fitScale, fitView, panBy, pinchView, toDoc, zoomAt } from '../engine/viewport';
+import { Insets, NO_INSETS, Point, Size, View, clampPan, fitView, panBy, pinchView, toDoc, zoomAt } from '../engine/viewport';
+import { Finished } from '../finished/finished';
 import { DebugReadout, PencilTuning, ReadoutLine } from './debug-readout';
 
-// The colouring screen (TECHNICAL-DESIGN.md 3, 5, 6). A thin shell: it
-// turns DOM events into engine calls and keeps the page transform up to
-// date. Milestone 2 has plain controls; the C1 theme comes in milestone 6.
+// The colouring screen (TECHNICAL-DESIGN.md 3, 5, 6), in the C1 theme. A
+// thin shell: it turns DOM events into engine calls and keeps the page
+// transform up to date. "Finished" opens over it (see finished.ts), and
+// leaving with colour on the page asks first, as nothing is saved yet.
 
-// Until the palette arrives (milestone 5).
-const COLOURS = ['#3A2E22', '#E8590C', '#F06595', '#FCC419', '#20C997', '#339AF0', '#7950F2', '#868E96'];
 const DEBUG_KEY = 'colouring.debug';
+// Room left between the controls and a fitted page.
+const FIT_GAP = 12;
+// The size presets' dots on the tool roll, in px.
+const DOT_SIZES = [6, 10, 14, 20, 26];
 
 @Component({
   selector: 'app-colouring',
-  imports: [RouterLink, DebugReadout],
+  imports: [RouterLink, DebugReadout, Finished],
   templateUrl: './colouring.html',
   styleUrl: './colouring.css',
 })
@@ -33,6 +39,10 @@ export class Colouring {
   private readonly pageRef = viewChild.required<ElementRef<HTMLDivElement>>('page');
   private readonly colourRef = viewChild.required<ElementRef<HTMLCanvasElement>>('colourCanvas');
   private readonly wetRef = viewChild.required<ElementRef<HTMLCanvasElement>>('wetCanvas');
+  private readonly topBarRef = viewChild.required<ElementRef<HTMLElement>>('topBar');
+  private readonly toolRollRef = viewChild.required<ElementRef<HTMLElement>>('toolRoll');
+  private readonly paintTinRef = viewChild.required<ElementRef<HTMLElement>>('paintTin');
+  private readonly leaveDialogRef = viewChild.required<ElementRef<HTMLDialogElement>>('leaveDialog');
 
   private readonly catalogue = inject(CatalogueService);
   private readonly router = inject(Router);
@@ -43,8 +53,13 @@ export class Colouring {
   protected readonly tool = signal<BrushId>('pencil');
   protected readonly sizeIndex = signal(2);
   protected readonly sizes = SIZE_FRACTIONS.map((_, i) => i);
-  protected readonly colours = COLOURS;
-  protected readonly colour = signal(COLOURS[2]);
+  protected readonly dotSizes = DOT_SIZES;
+  protected readonly paints = PAINTS;
+  protected readonly paint = signal<Paint>(DEFAULT_PAINT);
+  protected readonly plateNo = computed(() => roman(this.picture()?.plate ?? 0));
+  protected readonly zoomPercent = signal(100);
+  protected readonly finishedOpen = signal(false);
+  protected readonly finishedPng = signal<Blob | null>(null);
   protected readonly canUndo = signal(false);
   protected readonly canRedo = signal(false);
   protected readonly showDebug = signal(false);
@@ -73,6 +88,13 @@ export class Colouring {
   // True until the person zooms or pans: a resize then refits the page.
   private fitted = true;
   private pinchStart: { view: View; a: Point; b: Point } | null = null;
+  // The stage area covered by the controls.
+  private insets: Insets = NO_INSETS;
+  // Colour has been put down since the picture opened.
+  private dirty = false;
+  // Leaving was already confirmed (from the Finished screen).
+  private leaving = false;
+  private resolveLeave: ((leave: boolean) => void) | null = null;
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -92,6 +114,11 @@ export class Colouring {
       window.addEventListener('blur', onBlur);
       const onVisibility = () => this.diagnostics.log(document.hidden ? 'page hidden' : 'page visible');
       document.addEventListener('visibilitychange', onVisibility);
+      // Closing or reloading the tab with colour on the page: the browser asks.
+      const onBeforeUnload = (e: BeforeUnloadEvent) => {
+        if (this.dirty && !this.leaving) e.preventDefault();
+      };
+      window.addEventListener('beforeunload', onBeforeUnload);
 
       let raf = 0;
       let last = performance.now();
@@ -112,6 +139,7 @@ export class Colouring {
         window.removeEventListener('keyup', onKey);
         window.removeEventListener('blur', onBlur);
         document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('beforeunload', onBeforeUnload);
         cancelAnimationFrame(raf);
         clearInterval(readoutTimer);
         clearInterval(snapshotTimer);
@@ -216,7 +244,7 @@ export class Colouring {
           this.smoother = this.smoothing() ? new PointSmoother() : null;
           const brush = this.tool() === 'eraser' ? ERASER : { ...PENCIL, ...this.tuning() };
           const pressure = this.pressureOf(s);
-          doc.beginStroke(brush, this.colour(), this.sizeIndex(), this.toDocPoint(s), pressure);
+          doc.beginStroke(brush, this.paint().hex, this.sizeIndex(), this.toDocPoint(s), pressure);
           this.diagnostics.strokeStart(s.kind, this.tool(), pressure);
           break;
         }
@@ -230,6 +258,7 @@ export class Colouring {
         case 'stroke-end': {
           const t0 = performance.now();
           doc.endStroke();
+          this.dirty = true;
           this.diagnostics.strokeEnd('committed', performance.now() - t0, this.undoText());
           this.refreshHistory();
           break;
@@ -289,9 +318,59 @@ export class Colouring {
 
   protected fit(): void {
     if (!this.doc) return;
-    this.view = fitView(this.doc.size, this.stage);
+    this.view = fitView(this.doc.size, this.stage, this.insets);
     this.viewDirty = true;
     this.fitted = true;
+  }
+
+  protected choosePaint(p: Paint): void {
+    this.paint.set(p);
+    this.tool.set('pencil');
+  }
+
+  // ---- Finished and leaving --------------------------------------------------
+
+  protected openFinished(): void {
+    const doc = this.doc;
+    const picture = this.picture();
+    if (!doc || !picture) return;
+    this.apply(this.input.reset());
+    this.finishedPng.set(null);
+    this.finishedOpen.set(true);
+    const t0 = performance.now();
+    flatten(this.colourRef().nativeElement, picture.svg, doc.size)
+      .then((png) => {
+        this.diagnostics.log(`finished: PNG ${megabytes(png.size)} in ${Math.round(performance.now() - t0)} ms`);
+        if (this.finishedOpen()) this.finishedPng.set(png);
+      })
+      .catch((err: unknown) => this.diagnostics.log(`finished: export failed: ${String(err)}`));
+  }
+
+  protected closeFinished(): void {
+    this.finishedOpen.set(false);
+    this.finishedPng.set(null);
+  }
+
+  protected leaveToLibrary(): void {
+    this.leaving = true;
+    void this.router.navigate(['/']);
+  }
+
+  // The route's canDeactivate guard: with colour on the page, ask first.
+  canLeave(): boolean | Promise<boolean> {
+    if (!this.dirty || this.leaving) return true;
+    const dialog = this.leaveDialogRef().nativeElement;
+    this.apply(this.input.reset());
+    dialog.returnValue = '';
+    dialog.showModal();
+    return new Promise((resolve) => (this.resolveLeave = resolve));
+  }
+
+  protected onLeaveDialogClosed(): void {
+    const leave = this.leaveDialogRef().nativeElement.returnValue === 'leave';
+    if (leave) this.leaving = true;
+    this.resolveLeave?.(leave);
+    this.resolveLeave = null;
   }
 
   private refreshHistory(): void {
@@ -313,10 +392,29 @@ export class Colouring {
     this.stage = { width: rect.width, height: rect.height };
     this.stageLeft = rect.left;
     this.stageTop = rect.top;
+    this.measureInsets(rect);
     if (!this.doc) return;
     // Rotating or resizing only refits the view; the document is untouched.
     if (this.fitted) this.fit();
     else this.setView(clampPan(this.view, this.doc.size, this.stage));
+  }
+
+  // How much of each stage edge the controls cover. The tool roll runs
+  // down the left in landscape and across the top in portrait.
+  private measureInsets(stage: DOMRect): void {
+    const bar = this.topBarRef().nativeElement.getBoundingClientRect();
+    const roll = this.toolRollRef().nativeElement.getBoundingClientRect();
+    const tin = this.paintTinRef().nativeElement.getBoundingClientRect();
+    const rollAcross = roll.width > roll.height;
+    const top = (rollAcross ? roll.bottom : bar.bottom) - stage.top + FIT_GAP;
+    const left = rollAcross ? FIT_GAP : roll.right - stage.left + FIT_GAP;
+    this.insets = {
+      top,
+      left,
+      // Keep the page centred on the screen when the roll is at the side.
+      right: rollAcross ? FIT_GAP : left,
+      bottom: stage.bottom - tin.top + FIT_GAP,
+    };
   }
 
   private measureStageOrigin(): void {
@@ -329,6 +427,7 @@ export class Colouring {
     const { scale, tx, ty } = this.view;
     this.pageRef().nativeElement.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
     this.viewDirty = false;
+    if (this.doc) this.zoomPercent.set(Math.round((scale / fitView(this.doc.size, this.stage, this.insets).scale) * 100));
   }
 
   // ---- Diagnostics ---------------------------------------------------------
@@ -353,7 +452,6 @@ export class Colouring {
     const s = d.lastStroke;
     const frames = d.frameStats();
     const memory = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory;
-    const zoom = this.doc ? Math.round((this.view.scale / fitScale(this.doc.size, this.stage)) * 100) : 0;
     return [
       { label: 'pen mode', value: this.input.penMode ? 'on' : 'off' },
       { label: 'stroke', value: s ? `${s.tool} by ${s.kind} · ${s.hz ?? '-'} Hz · ${s.samples} samples` : '-' },
@@ -361,7 +459,7 @@ export class Colouring {
       { label: 'draw', value: s?.drawMsPerEvent != null ? `${s.drawMsPerEvent.toFixed(2)} ms/event` : '-' },
       { label: 'commit', value: `${d.lastCommitMs.toFixed(1)} ms` },
       { label: 'frame', value: `${frames.avg.toFixed(1)} ms avg · ${frames.max.toFixed(0)} ms max` },
-      { label: 'zoom', value: `${zoom}% of fit` },
+      { label: 'zoom', value: `${this.zoomPercent()}% of fit` },
       { label: 'undo', value: this.undoText() },
       { label: 'JS heap', value: memory ? megabytes(memory.usedJSHeapSize) : 'n/a' },
     ];
@@ -399,7 +497,7 @@ export class Colouring {
         'Settings',
         [
           `picture ${this.picture()?.id ?? '-'} · document ${size ? `${size.width}×${size.height}` : '-'}`,
-          `tool ${this.tool()} · size ${this.sizeIndex() + 1} · colour ${this.colour()}`,
+          `tool ${this.tool()} · size ${this.sizeIndex() + 1} · colour ${this.paint().name} ${this.paint().hex}`,
           `fingers draw in pen mode ${this.fingersDraw()} · smoothing ${this.smoothing()}`,
           `pencil: width at no pressure ${t.sizeMin} · opacity ${t.opacityMin}–${t.opacityMax} · curve ${t.gamma}`,
         ],

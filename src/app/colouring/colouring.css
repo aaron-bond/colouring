@@ -1,77 +1,29 @@
-/* Plain controls for milestone 2; the C1 theme replaces them in
-   milestone 6 (TECHNICAL-DESIGN.md 15). */
+/* The colouring screen in the C1 theme (docs/CONTEXT.md 9): the page on a
+   teal desk, a paper top bar, a stitched tool roll (down the left in
+   landscape, across the top in portrait) and the paint tin at the bottom.
+   The controls float over the stage; the page fits into the space they
+   leave. */
 :host {
   position: fixed;
   inset: 0;
+  overflow: hidden;
+  --gap: 18px;
 }
 
-.screen {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  height: 100%;
+svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px
-    max(12px, env(safe-area-inset-left));
-  background: #f4ecd9;
-  border-bottom: 1px solid #d8ccb4;
-  font-size: 14px;
-}
-
-.back {
-  min-height: 44px;
-  line-height: 44px;
-  color: inherit;
-}
-
-.title {
-  font-weight: 600;
-}
-
-.group {
-  display: flex;
-  gap: 4px;
-}
-
-button {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid #b9a88e;
-  border-radius: 8px;
-  background: #fff;
-  color: inherit;
-  font: inherit;
-}
-
-button.on {
-  background: #3a2e22;
-  color: #fff;
-}
-
-button:disabled {
-  opacity: 0.4;
-}
-
-.swatch {
-  padding: 0;
-  border-radius: 50%;
-}
-
-.swatch.on {
-  outline: 3px solid #3a2e22;
-  outline-offset: 2px;
-}
+/* ---- Stage and page ----------------------------------------------------- */
 
 .stage {
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  background: #1f6f78;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -84,7 +36,7 @@ button:disabled {
   top: 0;
   transform-origin: 0 0;
   visibility: hidden;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 20%);
+  box-shadow: 0 10px 26px rgb(0 0 0 / 30%);
 }
 
 .page.ready {
@@ -105,4 +57,382 @@ button:disabled {
 
 .lines {
   pointer-events: none;
+}
+
+/* ---- Top bar ------------------------------------------------------------ */
+
+.top-bar {
+  position: absolute;
+  top: max(var(--gap), env(safe-area-inset-top));
+  left: max(var(--gap), env(safe-area-inset-left));
+  right: max(var(--gap), env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.top-bar > * {
+  pointer-events: auto;
+}
+
+.left,
+.history,
+.right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.left {
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.right {
+  flex: 1 1 0;
+  justify-content: flex-end;
+}
+
+.title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--paper);
+}
+
+.name {
+  font: italic 500 22px/1.1 var(--serif);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub {
+  font-size: 17px;
+  font-weight: 600;
+  color: #c3f0cb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.back,
+.zoom,
+.finish {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.zoom {
+  font: 500 14px var(--mono);
+}
+
+.zoom svg {
+  width: 18px;
+}
+
+/* ---- Tool roll ---------------------------------------------------------- */
+
+.tool-roll {
+  position: absolute;
+  left: max(var(--gap), env(safe-area-inset-left));
+  top: calc(max(var(--gap), env(safe-area-inset-top)) + 52px + var(--gap));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100px;
+  padding: 14px 0;
+  box-sizing: border-box;
+  background: var(--roll);
+  box-shadow: 0 6px 16px rgb(0 0 0 / 28%);
+  outline: 2px dashed var(--roll-stitch);
+  outline-offset: -7px;
+}
+
+.tools,
+.sizes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tool {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 76px;
+  height: 62px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font: 500 11px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tool.on::before {
+  content: '';
+  position: absolute;
+  inset: 6px -6px;
+  background: repeating-linear-gradient(45deg, #f7a8c4 0 6px, #ffd6e5 6px 12px);
+  opacity: 0.9;
+  rotate: -2deg;
+}
+
+.tool svg,
+.tool span {
+  position: relative;
+  stroke-width: 1.8;
+}
+
+.stitch {
+  width: 60px;
+  margin: 6px 0;
+  border-top: 1.5px dashed var(--roll-stitch);
+}
+
+.sizes .label {
+  color: var(--ink-soft);
+  margin-bottom: 2px;
+}
+
+.size {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.size.on {
+  background: var(--paper-light);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.size i {
+  display: block;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+/* ---- Paint tin ---------------------------------------------------------- */
+
+.paint-tin {
+  position: absolute;
+  left: 50%;
+  bottom: max(var(--gap), env(safe-area-inset-bottom));
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--tin);
+  border-radius: 14px;
+  box-shadow:
+    0 8px 18px rgb(0 0 0 / 35%),
+    inset 0 2px 0 rgb(255 255 255 / 12%);
+}
+
+.current {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 72px;
+}
+
+.current .swatch {
+  width: 56px;
+  height: 44px;
+  border-radius: 10px;
+  box-shadow:
+    inset 0 -6px 0 rgb(0 0 0 / 18%),
+    inset 0 4px 0 rgb(255 255 255 / 30%);
+}
+
+.current .hand {
+  font-size: 16px;
+  color: var(--paper);
+  white-space: nowrap;
+}
+
+.divider {
+  width: 1.5px;
+  align-self: stretch;
+  background: rgb(255 255 255 / 18%);
+}
+
+.pans {
+  display: grid;
+  grid-template-columns: repeat(8, 38px);
+  gap: 8px;
+}
+
+.pan {
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow:
+    inset 0 -5px 0 rgb(0 0 0 / 16%),
+    inset 0 3px 0 rgb(255 255 255 / 25%);
+}
+
+.pan.on {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+/* ---- Leave dialog ------------------------------------------------------- */
+
+.leave {
+  position: fixed;
+  overflow: visible;
+  width: min(400px, calc(100vw - 48px));
+  padding: 26px 26px 22px;
+  box-sizing: border-box;
+  border: none;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 14px 32px rgb(0 0 0 / 35%);
+}
+
+.leave::backdrop {
+  background: rgb(15 40 44 / 55%);
+}
+
+.leave h2 {
+  margin: 0 0 8px;
+  font: 700 34px/1 var(--hand);
+  color: #d6336c;
+}
+
+.leave p {
+  margin: 0 0 20px;
+  font: 500 17px/1.4 var(--serif);
+  color: #5c4c3a;
+}
+
+.leave-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.leave .paper-button:not(.primary) {
+  box-shadow: inset 0 0 0 1.5px var(--rule);
+  background: var(--paper-light);
+}
+
+/* ---- Portrait: the tool roll unrolls across the top ---------------------- */
+
+@media (orientation: portrait) {
+  .tool-roll {
+    right: max(var(--gap), env(safe-area-inset-right));
+    width: auto;
+    height: 84px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 10px;
+    padding: 0 14px;
+  }
+
+  .tools,
+  .sizes {
+    flex-direction: row;
+  }
+
+  .stitch {
+    width: 0;
+    height: 52px;
+    margin: 0 6px;
+    border-top: none;
+    border-left: 1.5px dashed var(--roll-stitch);
+  }
+
+  .sizes .label {
+    margin: 0 4px 0 0;
+  }
+}
+
+/* ---- Narrow screens (phones) --------------------------------------------- */
+
+@media (max-width: 720px) {
+  :host {
+    --gap: 10px;
+  }
+
+  .wide-only,
+  .sub,
+  .zoom span {
+    display: none;
+  }
+
+  .paper-button.back,
+  .zoom {
+    width: 52px;
+    padding: 0;
+  }
+
+  .finish {
+    padding: 0 14px;
+  }
+
+  .name {
+    font-size: 19px;
+  }
+
+  .current,
+  .divider {
+    display: none;
+  }
+
+  .paint-tin {
+    padding: 10px;
+  }
+
+  .pans {
+    grid-template-columns: repeat(8, minmax(30px, 38px));
+    gap: 8px 6px;
+  }
+
+  .tool-roll {
+    height: 72px;
+    gap: 2px;
+    padding: 0 6px;
+  }
+
+  .tool {
+    width: 64px;
+    height: 56px;
+  }
+
+  .sizes .label {
+    display: none;
+  }
+
+  .size {
+    width: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    display: none;
+  }
 }

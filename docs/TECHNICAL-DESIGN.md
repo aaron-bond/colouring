@@ -1,8 +1,9 @@
 # Colouring App: Technical Design (v1)
 
-**Status:** agreed 2026-11-16 (decisions in section 16). The scaffold
-is built and the device spike (milestone 1) is done; its results are in
-section 11.1. Written after the UX first pass
+**Status:** agreed 2026-11-16 (decisions in section 16). Milestones 1
+(the device spike, results in 11.1) and 2 (the engine core) are done;
+milestone 3, a working app in the C1 theme, is built (section 15).
+Written after the UX first pass
 and after choosing the C1 "hand-tinted field guide" theme (see
 `CONTEXT.md` section 9). **Photo → line art is deferred:** nothing here
 depends on it, and section 12 notes what would change when it returns.
@@ -62,9 +63,9 @@ URLs, the server only ever sees `/colouring/`.
 | Route | Screen | Notes |
 | --- | --- | --- |
 | `''` | Library | `?category=animals` keeps the selected index tab in the URL |
-| `colour/new/:pictureId` | none | Creates an `Artwork`, then redirects (`replaceUrl`) to `colour/:artworkId`. Until milestone 3 stores artworks, it opens the Colouring screen directly |
+| `colour/new/:pictureId` | none | Creates an `Artwork`, then redirects (`replaceUrl`) to `colour/:artworkId`. Until milestone 4 stores artworks, it opens the Colouring screen directly |
 | `colour/:artworkId` | Colouring | A resolver loads the artwork; an unknown id redirects to the library |
-| `finished/:artworkId` | Finished | |
+| `finished/:artworkId` | Finished | Until milestone 4, Finished opens over the Colouring screen instead (decision 14) |
 | `**` | none | Redirects to the library |
 
 ```
@@ -76,11 +77,13 @@ src/app/
   colouring/              Colouring screen: stage, tool roll, paint tin, mixer
     debug-readout.ts      hidden diagnostics and pencil tuning (?debug=1)
   finished/               Finished screen: stamp, save/share/print
+                          (an overlay on Colouring until saving arrives)
   core/
     catalogue.service.ts  loads catalogue.json; Picture definitions
     artwork.store.ts      IndexedDB: artworks, images, thumbnails
     prefs.service.ts      handedness, finger-draws-with-pen, recents, last tool
-    export.service.ts     flatten → PNG, share sheet, print
+    export.ts             flatten → PNG, download, share sheet (print later)
+    field-guide.ts        index-tab categories, paint tin, plate numerals
     app-updates.ts        switching to a new version (3.1)
   engine/                 plain TypeScript, no Angular, unit-testable
     document.ts           layers + document size
@@ -629,16 +632,23 @@ code; this covers its project setup and conventions.
    undo/redo. Tested on 2 SVGs, with unstyled UI. Keep the spike's
    copyable diagnostics report as a hidden debug readout, so device
    results can still be pasted back.
-3. **Persistence:** autosave, reopen, thumbnails, "Specimens in
-   progress".
-4. **Library:** catalogue, `check-pictures`, the 5 launch plates.
-5. **Colour:** the paint tin, the mixer, recent colours.
-6. **C1 theme UI** across all screens, landscape and portrait.
-7. **Finished:** stamp, share sheet, print (coloured or blank),
-   download, PWA install.
+Reordered 2026-11-19 (decision 14): a working app in the C1 theme
+first, then the utilities, then more pictures.
 
-New versions (3.1) are handled in milestone 2, because every device test
-needs them.
+3. **A working app in the C1 theme** (built 2026-11-19): the library
+   as a field guide (index tabs, numbered plates), the colouring screen
+   (top bar, tool roll, a 16-colour paint tin, zoom chip), and Finished
+   (download, share sheet), in landscape and portrait, down to phone
+   width. Leaving with colour on the page asks first.
+4. **Persistence:** autosave, reopen, thumbnails, "Specimens in
+   progress"; Finished becomes its own route with the stamp.
+5. **Colour and tools:** the mixer, more palettes, recent colours; more
+   brushes one at a time.
+6. **Library content:** `check-pictures`, the 5 launch plates.
+7. **The rest of Finished:** print (coloured or blank), PWA install.
+
+New versions (3.1) were handled in milestone 2, because every device
+test needs them.
 
 After v1, in rough order: tap-to-fill (section 8), more brushes (7),
 photo → line art (12).
@@ -687,3 +697,17 @@ From device testing of milestone 2, 2026-11-18 and 19:
     steady enough. The switch stays in the debug readout.
 13. **Pencil defaults kept:** width 30-100% and opacity 15-90% with
     pressure, linear curve.
+
+From the owner, 2026-11-19:
+
+14. **A working app before utilities.** Build the full flow in the C1
+    theme (library, colouring, finished) first; then saving and extra
+    colours and tools; then more pictures. Until saving exists:
+    - Finished opens over the colouring screen instead of at
+      `finished/:artworkId`, so "Keep colouring" loses nothing. It
+      offers download and share only, and says pictures aren't kept.
+    - Leaving the colouring screen with colour on the page asks first
+      (a `canDeactivate` guard, and the browser's own prompt on close).
+    - Only categories that have plates get an index tab.
+    - Fonts are bundled from `@fontsource` (Latin only), so they work
+      offline.

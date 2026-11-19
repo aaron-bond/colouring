@@ -1,5 +1,37 @@
-/* Global basics only. The C1 theme tokens (desk, paper, ink, fonts) arrive
-   with milestone 6; keep component styles in their components. */
+/* The C1 "hand-tinted field guide" theme (docs/CONTEXT.md 9): a teal desk,
+   cream paper, sepia ink; EB Garamond, IBM Plex Mono for small labels and
+   Caveat for handwritten notes. Fonts are bundled, so they work offline.
+   Shared pieces (paper buttons, washi tape, labels) live here; everything
+   else stays in its component. */
+@import '@fontsource/eb-garamond/latin-500.css';
+@import '@fontsource/eb-garamond/latin-500-italic.css';
+@import '@fontsource/eb-garamond/latin-600.css';
+@import '@fontsource/ibm-plex-mono/latin-500.css';
+@import '@fontsource/caveat/latin-600.css';
+@import '@fontsource/caveat/latin-700.css';
+
+:root {
+  --desk: #1f6f78;
+  --desk-dots: radial-gradient(rgb(255 255 255 / 7%) 1.5px, transparent 1.8px) 0 0 / 22px 22px;
+  --paper: #f4ecd9;
+  --paper-light: #fbf6ea;
+  --page: #fffdf7;
+  --roll: #e9dcc0;
+  --roll-stitch: #b79f78;
+  --ink: #3a2e22;
+  --ink-soft: #6b5a45;
+  --ink-faint: #a89a86;
+  --rule: #b9a88e;
+  --accent: #b4361f;
+  --accent-dark: #8e2a17;
+  --tin: #3a3f47;
+  --serif: 'EB Garamond', Georgia, serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --hand: Caveat, 'Comic Sans MS', cursive;
+  --lift: 0 2px 6px rgb(0 0 0 / 22%);
+  color-scheme: light;
+}
+
 html,
 body {
   margin: 0;
@@ -7,8 +39,91 @@ body {
 }
 
 body {
-  font-family: system-ui, sans-serif;
-  color: #3a2e22;
-  background: #f4ecd9;
+  font-family: var(--serif);
+  color: var(--ink);
+  background: var(--desk);
+  background-image: radial-gradient(rgb(255 255 255 / 7%) 1.5px, transparent 1.8px);
+  background-size: 22px 22px;
   -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid #ffc23d;
+  outline-offset: 2px;
+}
+
+/* A small capitals label: "PLATE II", "SIZE". */
+.label {
+  font: 500 11px var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.hand {
+  font: 700 20px var(--hand);
+}
+
+/* A paper button on the desk: Back, Undo, zoom, Finished. */
+.paper-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 16px;
+  box-sizing: border-box;
+  border: none;
+  background: var(--paper);
+  color: var(--ink);
+  font: 600 17px var(--serif);
+  text-decoration: none;
+  box-shadow: var(--lift);
+  cursor: pointer;
+}
+
+.paper-button.icon {
+  padding: 0;
+}
+
+.paper-button:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.paper-button.primary {
+  background: var(--accent);
+  color: #fff;
+  padding: 0 22px;
+}
+
+/* Washi tape on a corner; set --tape to a stripe and place it inline. */
+.tape {
+  position: absolute;
+  width: 72px;
+  height: 22px;
+  opacity: 0.88;
+  pointer-events: none;
+  background: var(--tape);
+}
+
+.tape.blue {
+  --tape: repeating-linear-gradient(45deg, #5bb8f0 0 7px, #a5d8ff 7px 14px);
+}
+.tape.yellow {
+  --tape: repeating-linear-gradient(90deg, #ffc23d 0 9px, #ffe8a3 9px 18px);
+}
+.tape.pink {
+  --tape: repeating-linear-gradient(45deg, #f06595 0 6px, #ffc9de 6px 12px);
+}
+.tape.green {
+  --tape: repeating-linear-gradient(90deg, #6cc57c 0 8px, #c3f0cb 8px 16px);
+}
+.tape.violet {
+  --tape: repeating-linear-gradient(45deg, #b79bf7 0 6px, #e5dbff 6px 12px);
 }

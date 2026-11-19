@@ -31,13 +31,33 @@ export function fitScale(doc: Size, stage: Size): number {
   return Math.min(stage.width / doc.width, stage.height / doc.height) * FIT_MARGIN;
 }
 
-// The document scaled to fit and centred on the stage.
-export function fitView(doc: Size, stage: Size): View {
-  const scale = fitScale(doc, stage);
+// Space on each side of the stage covered by the screen's controls.
+export interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+// The part of the stage left uncovered by the controls (at least 1 px).
+export function freeArea(stage: Size, insets: Insets): Size {
+  return {
+    width: Math.max(1, stage.width - insets.left - insets.right),
+    height: Math.max(1, stage.height - insets.top - insets.bottom),
+  };
+}
+
+// The document scaled to fit and centred in the stage's free area, so
+// the controls floating over the stage don't cover the page.
+export function fitView(doc: Size, stage: Size, insets: Insets = NO_INSETS): View {
+  const area = freeArea(stage, insets);
+  const scale = fitScale(doc, area);
   return {
     scale,
-    tx: (stage.width - doc.width * scale) / 2,
-    ty: (stage.height - doc.height * scale) / 2,
+    tx: insets.left + (area.width - doc.width * scale) / 2,
+    ty: insets.top + (area.height - doc.height * scale) / 2,
   };
 }
 

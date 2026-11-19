@@ -5,10 +5,10 @@ colour in with a pencil, an eraser and undo, saved on the device. It's
 an installable PWA on GitHub Pages, built with Angular 22 (standalone
 components and signals).
 
-**Status:** MVP in progress: milestone 2 (the engine core) is done, and
-milestone 3 (persistence) is next. The colouring screen draws with
-Pencil and Eraser, zooms and pans, and has undo, on two test pictures
-with plain controls.
+**Status:** MVP in progress: milestone 3 (a working app in the C1
+theme). Pick a plate from the field guide, colour it with Pencil and
+Eraser, then download or share it. Nothing is saved yet; that's
+milestone 4.
 
 ## Docs
 

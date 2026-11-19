@@ -81,6 +81,19 @@ test('the library lists the pictures and opens one', async ({ page }) => {
   expect(size).toEqual([1536, 2048]);
 });
 
+test('the index tabs filter the plates', async ({ page }) => {
+  await page.goto('');
+  await expect(page.getByRole('link', { name: /Tulips/ })).toBeVisible();
+  await page.getByRole('link', { name: 'Mandalas' }).click();
+  await expect(page).toHaveURL(/category=mandalas/);
+  await expect(page.getByRole('heading', { name: 'Mandalas' })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Lotus mandala/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Tulips/ })).toHaveCount(0);
+  // Tapping the open tab again shows every plate.
+  await page.getByRole('link', { name: 'Mandalas' }).click();
+  await expect(page.getByRole('link', { name: /Tulips/ })).toBeVisible();
+});
+
 test('an unknown picture goes back to the library', async ({ page }) => {
   await page.goto('#/colour/new/no-such-picture');
   await expect(page).toHaveURL(/#\/$/);
@@ -172,6 +185,59 @@ test.describe('on the colouring screen', () => {
 
     expect(await paintedPixels(page)).toBe(0);
     await expect.poll(() => pageTransform(page)).not.toBe(before);
+  });
+
+  test('choosing a paint switches back from the eraser', async ({ page }) => {
+    await page.getByRole('button', { name: 'Eraser' }).click();
+    await page.getByRole('button', { name: 'sky', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Pencil' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('img', { name: 'Current colour: sky' })).toBeVisible();
+  });
+
+  test('leaving with colour on the page asks first', async ({ page }) => {
+    // Nothing drawn: no question.
+    await page.getByRole('link', { name: 'Back to the guide' }).click();
+    await expect(page).toHaveURL(/#\/$/);
+    await open(page, 'lotus-mandala');
+
+    const [cx, cy] = await stageCentre(page);
+    await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy]);
+    await page.getByRole('link', { name: 'Back to the guide' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Leave this plate?' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Keep colouring' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(/colour\/new\/lotus-mandala/);
+    expect(await paintedPixels(page)).toBeGreaterThan(1000);
+
+    await page.getByRole('link', { name: 'Back to the guide' }).click();
+    await dialog.getByRole('button', { name: 'Leave' }).click();
+    await expect(page).toHaveURL(/#\/$/);
+  });
+
+  test('finishing shows the picture to download, and colouring can carry on', async ({ page }) => {
+    const [cx, cy] = await stageCentre(page);
+    await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy]);
+    const painted = await paintedPixels(page);
+    await page.getByRole('button', { name: 'Finished' }).click();
+    const finished = page.getByRole('dialog', { name: 'Lovely work!' });
+    await expect(finished).toBeVisible();
+    await expect(finished.getByRole('img', { name: /Your coloured Lotus mandala/ })).toBeVisible();
+
+    const downloading = page.waitForEvent('download');
+    await finished.getByRole('button', { name: /Download PNG/ }).click();
+    const file = await downloading;
+    expect(file.suggestedFilename()).toBe('lotus-mandala.png');
+    await expect(page.getByRole('status')).toContainText('downloaded');
+
+    await finished.getByRole('button', { name: 'Keep colouring' }).click();
+    await expect(finished).toBeHidden();
+    expect(await paintedPixels(page)).toBe(painted);
+
+    // From Finished, going back to the guide doesn't ask again.
+    await page.getByRole('button', { name: 'Finished' }).click();
+    await finished.getByRole('button', { name: 'Back to the guide' }).click();
+    await expect(page).toHaveURL(/#\/$/);
   });
 
   test('resizing (rotating) keeps the colour and refits the page', async ({ page }) => {

@@ -1,72 +1,137 @@
-<div class="screen">
-  <header class="toolbar" aria-label="Tools">
-    <a routerLink="/" class="back">← Library</a>
-    <span class="title">{{ picture()?.title ?? '…' }}</span>
-
-    <div class="group" role="group" aria-label="Tool">
-      <button type="button" [class.on]="tool() === 'pencil'" [attr.aria-pressed]="tool() === 'pencil'" (click)="tool.set('pencil')">Pencil</button>
-      <button type="button" [class.on]="tool() === 'eraser'" [attr.aria-pressed]="tool() === 'eraser'" (click)="tool.set('eraser')">Eraser</button>
-    </div>
-
-    <div class="group" role="group" aria-label="Size">
-      @for (i of sizes; track i) {
-        <button type="button" [class.on]="sizeIndex() === i" [attr.aria-pressed]="sizeIndex() === i" [attr.aria-label]="'Size ' + (i + 1)" (click)="sizeIndex.set(i)">
-          {{ i + 1 }}
-        </button>
-      }
-    </div>
-
-    <div class="group" role="group" aria-label="Colour">
-      @for (c of colours; track c) {
-        <button
-          type="button"
-          class="swatch"
-          [class.on]="colour() === c"
-          [attr.aria-pressed]="colour() === c"
-          [style.background]="c"
-          [attr.aria-label]="'Colour ' + c"
-          (click)="colour.set(c); tool.set('pencil')"
-        ></button>
-      }
-    </div>
-
-    <div class="group">
-      <button type="button" [disabled]="!canUndo()" (click)="undo()">Undo</button>
-      <button type="button" [disabled]="!canRedo()" (click)="redo()">Redo</button>
-      <button type="button" (click)="fit()">Fit</button>
-    </div>
-  </header>
-
-  <div
-    class="stage"
-    #stage
-    (pointerdown)="onPointerDown($event)"
-    (pointermove)="onPointerMove($event)"
-    (pointerup)="onPointerUp($event)"
-    (pointercancel)="onPointerUp($event)"
-    (wheel)="onWheel($event)"
-    (contextmenu)="$event.preventDefault()"
-  >
-    <div class="page" #page [class.ready]="docSize()">
-      <div class="paper"></div>
-      <canvas #colourCanvas class="layer colour"></canvas>
-      <canvas #wetCanvas class="layer wet"></canvas>
-      @if (picture(); as p) {
-        <img class="layer lines" [src]="p.svg" alt="" draggable="false" />
-      }
-    </div>
-
-    @if (showDebug()) {
-      <app-debug-readout
-        [lines]="readout()"
-        [status]="copyStatus()"
-        [fingersDraw]="fingersDraw()"
-        (fingersDrawChange)="setFingersDraw($event)"
-        [(smoothing)]="smoothing"
-        [(tuning)]="tuning"
-        (copy)="copyReport()"
-        (clear)="clearLog()"
-      />
+<div
+  class="stage"
+  #stage
+  (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerUp($event)"
+  (wheel)="onWheel($event)"
+  (contextmenu)="$event.preventDefault()"
+>
+  <div class="page" #page [class.ready]="docSize()">
+    <div class="paper"></div>
+    <canvas #colourCanvas class="layer colour"></canvas>
+    <canvas #wetCanvas class="layer wet"></canvas>
+    @if (picture(); as p) {
+      <img class="layer lines" [src]="p.svg" alt="" draggable="false" />
     }
   </div>
 </div>
+
+<!-- The controls float over the desk; the page is fitted into the space
+     they leave (measureInsets). Their taps never reach the stage. -->
+<header class="top-bar" #topBar aria-label="Picture">
+  <div class="left">
+    <a routerLink="/" class="paper-button back" aria-label="Back to the guide">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      <span class="wide-only">The guide</span>
+    </a>
+    <div class="title">
+      <span class="name">{{ picture()?.title ?? '…' }}</span>
+      @if (picture(); as p) {
+        <span class="sub hand">plate {{ plateNo() }} · {{ p.latinName }}</span>
+      }
+    </div>
+  </div>
+  <div class="history">
+    <button type="button" class="paper-button icon" aria-label="Undo" [disabled]="!canUndo()" (click)="undo()">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
+    </button>
+    <button type="button" class="paper-button icon" aria-label="Redo" [disabled]="!canRedo()" (click)="redo()">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>
+    </button>
+  </div>
+  <div class="right">
+    <button type="button" class="paper-button zoom" [attr.aria-label]="'Zoom ' + zoomPercent() + '%, tap to fit'" (click)="fit()">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+      <span>{{ zoomPercent() }}%</span>
+    </button>
+    <button type="button" class="paper-button primary finish" (click)="openFinished()">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
+      Finished
+    </button>
+  </div>
+</header>
+
+<div class="tool-roll" #toolRoll role="toolbar" aria-label="Tools">
+  <div class="tools">
+    <button type="button" class="tool" [class.on]="tool() === 'pencil'" [attr.aria-pressed]="tool() === 'pencil'" (click)="tool.set('pencil')">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L16 4l4 4L9 19z" /><path d="M14 6l4 4" /></svg>
+      <span>Pencil</span>
+    </button>
+    <button type="button" class="tool" [class.on]="tool() === 'eraser'" [attr.aria-pressed]="tool() === 'eraser'" (click)="tool.set('eraser')">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l9-9 6 6-7 7H8z" /><path d="M9 11l6 6" /></svg>
+      <span>Eraser</span>
+    </button>
+  </div>
+  <span class="stitch" aria-hidden="true"></span>
+  <div class="sizes" role="group" aria-label="Size">
+    <span class="label">Size</span>
+    @for (i of sizes; track i) {
+      <button
+        type="button"
+        class="size"
+        [class.on]="sizeIndex() === i"
+        [attr.aria-pressed]="sizeIndex() === i"
+        [attr.aria-label]="'Size ' + (i + 1)"
+        (click)="sizeIndex.set(i)"
+      >
+        <i [style.width.px]="dotSizes[i]" [style.height.px]="dotSizes[i]"></i>
+      </button>
+    }
+  </div>
+</div>
+
+<div class="paint-tin" #paintTin role="group" aria-label="Colours">
+  <div class="current">
+    <span class="swatch" role="img" [attr.aria-label]="'Current colour: ' + paint().name" [style.background]="paint().hex"></span>
+    <span class="hand">{{ paint().name }}</span>
+  </div>
+  <span class="divider" aria-hidden="true"></span>
+  <div class="pans">
+    @for (p of paints; track p.hex) {
+      <button
+        type="button"
+        class="pan"
+        [class.on]="paint() === p && tool() !== 'eraser'"
+        [attr.aria-pressed]="paint() === p"
+        [attr.aria-label]="p.name"
+        [style.background]="p.hex"
+        (click)="choosePaint(p)"
+      ></button>
+    }
+  </div>
+</div>
+
+@if (showDebug()) {
+  <app-debug-readout
+    [lines]="readout()"
+    [status]="copyStatus()"
+    [fingersDraw]="fingersDraw()"
+    (fingersDrawChange)="setFingersDraw($event)"
+    [(smoothing)]="smoothing"
+    [(tuning)]="tuning"
+    (copy)="copyReport()"
+    (clear)="clearLog()"
+  />
+}
+
+@if (finishedOpen() && picture() && docSize()) {
+  <app-finished
+    [picture]="picture()!"
+    [size]="docSize()!"
+    [blob]="finishedPng()"
+    (keepColouring)="closeFinished()"
+    (toLibrary)="leaveToLibrary()"
+  />
+}
+
+<dialog #leaveDialog class="leave" aria-labelledby="leave-title" (close)="onLeaveDialogClosed()">
+  <span class="tape pink" style="left: -18px; top: -8px; rotate: -24deg"></span>
+  <h2 id="leave-title">Leave this plate?</h2>
+  <p>Pictures aren't kept in the guide yet, so your colouring will be lost.</p>
+  <div class="leave-actions">
+    <button type="button" class="paper-button" (click)="leaveDialog.close('stay')">Keep colouring</button>
+    <button type="button" class="paper-button primary" (click)="leaveDialog.close('leave')">Leave</button>
+  </div>
+</dialog>

@@ -60,11 +60,12 @@ export interface PencilTuning {
   styles: `
     .debug {
       position: absolute;
-      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
       bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 5;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: flex-end;
       gap: 8px;
       max-width: min(440px, calc(100% - 24px));
       font: 12px/1.4 ui-monospace, monospace;

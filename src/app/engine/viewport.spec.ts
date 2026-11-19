@@ -23,6 +23,18 @@ describe('viewport', () => {
     expect(topLeft.y + bottomRight.y).toBeCloseTo(stage.height);
   });
 
+  it('fits the page into the area the controls leave free', () => {
+    const insets = { top: 90, right: 20, bottom: 100, left: 130 };
+    const view = fitView(doc, stage, insets);
+    // Free area 1030 × 630: the height limits.
+    expect(view.scale).toBeCloseTo((630 / 3072) * 0.92);
+    const topLeft = toStage(view, { x: 0, y: 0 });
+    const bottomRight = toStage(view, { x: doc.width, y: doc.height });
+    expect(topLeft.y).toBeGreaterThan(90);
+    expect(bottomRight.y).toBeLessThan(stage.height - 100);
+    expect((topLeft.x + bottomRight.x) / 2).toBeCloseTo(130 + 1030 / 2);
+  });
+
   it('round-trips between stage and document coordinates', () => {
     const view = { scale: 0.37, tx: 120, ty: -45 };
     const p = toDoc(view, toStage(view, { x: 1000, y: 2000 }));
