@@ -6,9 +6,10 @@ an installable PWA on GitHub Pages, built with Angular 22 (standalone
 components and signals).
 
 **Status:** MVP in progress: milestone 3 (a working app in the C1
-theme). Pick a plate from the field guide, colour it with Pencil and
-Eraser, then download or share it. Nothing is saved yet; that's
-milestone 4.
+theme), plus tap-to-fill and the colour sheet from milestone 5. Pick a
+plate from the field guide, colour it with Pencil, Fill and Eraser
+(the ＋ on the paint tin has more colours and a mixer), then download or
+share it. Nothing is saved yet; that's milestone 4.
 
 ## Docs
 

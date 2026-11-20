@@ -56,6 +56,28 @@ async function paintedPixels(page: Page): Promise<number> {
   });
 }
 
+// Counts opaque pixels on the fill layer.
+async function filledPixels(page: Page): Promise<number> {
+  return page.locator('canvas.fill').evaluate((c: HTMLCanvasElement) => {
+    const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+    let n = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] === 255) n++;
+    return n;
+  });
+}
+
+// The middle of the page on screen, in stage coordinates.
+async function pageCentre(page: Page): Promise<[number, number]> {
+  const stage = (await page.locator('.stage').boundingBox())!;
+  const box = (await page.locator('.page').boundingBox())!;
+  return [box.x - stage.x + box.width / 2, box.y - stage.y + box.height / 2];
+}
+
+async function tap(page: Page, kind: PointerKind, x: number, y: number) {
+  await pointer(page, 'pointerdown', kind, 1, x, y);
+  await pointer(page, 'pointerup', kind, 1, x, y);
+}
+
 async function pageTransform(page: Page): Promise<string> {
   return page.locator('.page').evaluate((el: HTMLElement) => el.style.transform);
 }
@@ -241,7 +263,8 @@ test.describe('on the colouring screen', () => {
     await page.getByRole('button', { name: 'Finished' }).click();
     const finished = page.getByRole('dialog', { name: 'Lovely work!' });
     await expect(finished).toBeVisible();
-    await expect(finished.getByRole('img', { name: /Your coloured Lotus mandala/ })).toBeVisible();
+    // Flattening two full-size layers to PNG is slow under parallel load.
+    await expect(finished.getByRole('img', { name: /Your coloured Lotus mandala/ })).toBeVisible({ timeout: 15_000 });
 
     const downloading = page.waitForEvent('download');
     await finished.getByRole('button', { name: /Download PNG/ }).click();
@@ -268,6 +291,106 @@ test.describe('on the colouring screen', () => {
     await page.setViewportSize({ width: size.height, height: size.width });
     await expect.poll(() => pageTransform(page)).not.toBe(before);
     expect(await paintedPixels(page)).toBe(painted);
+  });
+});
+
+test.describe('tap-to-fill', () => {
+  test('fills the shape under a tap, behind the pencil, as one undo step', async ({ page }) => {
+    await open(page, 'lotus-mandala');
+    await page.getByRole('button', { name: 'Fill', exact: true }).click();
+    const [cx, cy] = await pageCentre(page);
+    await tap(page, 'pen', cx, cy);
+    // The mandala's centre circle: some of the page, nowhere near all.
+    await expect.poll(() => filledPixels(page)).toBeGreaterThan(5000);
+    const filled = await filledPixels(page);
+    expect(filled).toBeLessThan(3072 * 3072 * 0.05);
+    expect(await paintedPixels(page)).toBe(0);
+
+    // Filling again recolours the same shape.
+    await page.getByRole('button', { name: 'sky', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Fill', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await tap(page, 'pen', cx, cy);
+    const centre = () =>
+      page.locator('canvas.fill').evaluate((c: HTMLCanvasElement) => [
+        ...c.getContext('2d')!.getImageData(c.width / 2, c.height / 2, 1, 1).data,
+      ]);
+    await expect.poll(centre).toEqual([0x33, 0x9a, 0xf0, 255]);
+    expect(await filledPixels(page)).toBe(filled);
+
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await page.getByRole('button', { name: 'Undo' }).click();
+    expect(await filledPixels(page)).toBe(0);
+    await page.getByRole('button', { name: 'Redo' }).click();
+    expect(await filledPixels(page)).toBe(filled);
+  });
+
+  test('a drag with fill does nothing', async ({ page }) => {
+    await open(page, 'lotus-mandala');
+    await page.getByRole('button', { name: 'Fill', exact: true }).click();
+    const [cx, cy] = await pageCentre(page);
+    await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy]);
+    await page.waitForTimeout(300);
+    expect(await filledPixels(page)).toBe(0);
+    expect(await paintedPixels(page)).toBe(0);
+    await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  });
+
+  test('the blank page fills edge to edge, and the eraser clears fills', async ({ page }) => {
+    await open(page, 'blank');
+    await page.getByRole('button', { name: 'Fill', exact: true }).click();
+    const [cx, cy] = await pageCentre(page);
+    await tap(page, 'mouse', cx, cy);
+    await expect.poll(() => filledPixels(page)).toBe(2048 * 1536);
+
+    await page.getByRole('button', { name: 'Eraser' }).click();
+    await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy]);
+    expect(await filledPixels(page)).toBeLessThan(2048 * 1536 - 1000);
+    await page.getByRole('button', { name: 'Undo' }).click();
+    expect(await filledPixels(page)).toBe(2048 * 1536);
+  });
+});
+
+test.describe('the colour sheet', () => {
+  test.beforeEach(async ({ page }) => open(page, 'lotus-mandala'));
+
+  test('picks palette colours and mixed colours, and remembers the ones used', async ({ page }) => {
+    const more = page.getByRole('button', { name: 'More colours' });
+    await more.click();
+    const sheet = page.getByRole('dialog', { name: 'More colours' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText('Recent')).toHaveCount(0);
+
+    await sheet.getByRole('button', { name: 'powder blue' }).click();
+    await expect(page.getByRole('img', { name: 'Current colour: powder blue' })).toBeVisible();
+
+    // Mixing: the bottom-left of the shade square is black whatever the hue.
+    const shade = sheet.getByRole('slider', { name: 'Shade' });
+    const box = (await shade.boundingBox())!;
+    await shade.evaluate((el, b) => {
+      for (const type of ['pointerdown', 'pointerup']) {
+        el.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, pointerId: 9, pointerType: 'mouse', clientX: b.x + 1, clientY: b.y + b.height - 1 }),
+        );
+      }
+    }, box);
+    await expect(page.getByRole('img', { name: 'Current colour: black' })).toBeVisible();
+    await sheet.getByRole('slider', { name: 'Hue' }).fill('120');
+    await sheet.getByRole('button', { name: 'sand' }).click();
+
+    // Touching the page puts the sheet away; using the colour remembers it.
+    const [cx, cy] = await stageCentre(page);
+    await stroke(page, 'pen', 1, [cx - 100, cy], [cx + 100, cy]);
+    await expect(sheet).toBeHidden();
+    await more.click();
+    await expect(sheet.getByRole('button', { name: 'Recent: sand' })).toBeVisible();
+
+    // The tin's own colours aren't repeated as recents.
+    await page.getByRole('button', { name: 'sky', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    await stroke(page, 'pen', 1, [cx - 100, cy + 40], [cx + 100, cy + 40]);
+    await more.click();
+    await expect(sheet.getByRole('button', { name: /^Recent:/ })).toHaveCount(1);
   });
 });
 

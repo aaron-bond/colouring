@@ -223,6 +223,10 @@ svg {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+.sizes.idle {
+  opacity: 0.35;
+}
+
 .size i {
   display: block;
   border-radius: 50%;
@@ -298,6 +302,37 @@ svg {
   outline-offset: 2px;
 }
 
+/* The ＋ that opens the colour sheet. */
+.more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 44px;
+  padding: 0;
+  border: 1.5px dashed rgb(255 255 255 / 45%);
+  border-radius: 10px;
+  background:
+    conic-gradient(from 0deg, #f03e3e, #fcc419, #51cf66, #339af0, #7950f2, #f06595, #f03e3e) center / 26px 26px no-repeat;
+  color: #fff;
+  cursor: pointer;
+}
+
+.more svg {
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 30%);
+  stroke-width: 3;
+}
+
+.more[aria-expanded='true'] {
+  border-style: solid;
+  border-color: #fff;
+}
+
 /* ---- Diagnostics gear (always shown for now) ---------------------------- */
 
 .gear {
@@ -324,6 +359,13 @@ svg {
 
 .gear svg {
   stroke-width: 1.8;
+}
+
+/* On phones the paint tin spans the bottom, so the gear sits above it. */
+@media (max-width: 720px) {
+  .gear {
+    bottom: calc(max(var(--gap), env(safe-area-inset-bottom)) + 100px);
+  }
 }
 
 /* ---- Leave dialog ------------------------------------------------------- */
@@ -462,5 +504,33 @@ svg {
 @media (max-width: 480px) {
   .title {
     display: none;
+  }
+
+  /* Three tools and five sizes across a phone: icons only (the names stay
+     for screen readers). */
+  .tool {
+    width: 50px;
+  }
+
+  .tool span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .size {
+    width: 36px;
+    height: 36px;
+  }
+
+  .pans {
+    grid-template-columns: repeat(8, minmax(26px, 38px));
+    gap: 8px 5px;
+  }
+
+  .more {
+    width: 38px;
   }
 }

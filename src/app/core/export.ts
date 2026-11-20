@@ -1,12 +1,13 @@
 // Exporting a finished picture (TECHNICAL-DESIGN.md 3, "Finished"): the
-// paper, the colour layer and the line art flattened into one PNG at the
+// paper, the fill and colour layers and the line art flattened into one PNG at the
 // document's full size, then downloaded or handed to the share sheet.
 
 import { Size } from '../engine/viewport';
 
 export const PAPER = '#FFFDF7';
 
-export async function flatten(colour: HTMLCanvasElement, svgUrl: string, size: Size): Promise<Blob> {
+// `layers` are drawn bottom first (the fill layer, then the colour layer).
+export async function flatten(layers: HTMLCanvasElement[], svgUrl: string, size: Size): Promise<Blob> {
   const lines = await loadImage(svgUrl);
   const canvas = document.createElement('canvas');
   canvas.width = size.width;
@@ -14,7 +15,7 @@ export async function flatten(colour: HTMLCanvasElement, svgUrl: string, size: S
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, size.width, size.height);
-  ctx.drawImage(colour, 0, 0, size.width, size.height);
+  for (const layer of layers) ctx.drawImage(layer, 0, 0, size.width, size.height);
   // An SVG is rasterised at the size it's drawn, so the lines stay crisp.
   ctx.drawImage(lines, 0, 0, size.width, size.height);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
@@ -63,7 +64,7 @@ export async function share(blob: Blob, name: string, title: string): Promise<'s
   }
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+export function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);

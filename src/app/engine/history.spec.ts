@@ -173,3 +173,36 @@ describe('rollback', () => {
     expect(history.canUndo).toBe(false);
   });
 });
+
+describe('several layers', () => {
+  it('snapshots each layer separately, and undoes them together', () => {
+    const fill = new FakeSurface(TILE * 2, TILE);
+    const colour = new FakeSurface(TILE * 2, TILE);
+    const history = new TileHistory([fill, colour], Infinity);
+    // One operation (an eraser stroke) changes the same tile on both layers.
+    fill.paint({ x: 0, y: 0, width: 4, height: 4 }, 5);
+    colour.paint({ x: 0, y: 0, width: 4, height: 4 }, 6);
+    history.begin();
+    history.touchTile(0, 0);
+    history.touchTile(0, 1);
+    history.touchTile(0, 1);
+    fill.paint({ x: 0, y: 0, width: 4, height: 4 }, 0);
+    colour.paint({ x: 0, y: 0, width: 4, height: 4 }, 0);
+    history.commit();
+    expect(history.totalBytes).toBe(TILE * TILE * 2);
+
+    history.undo();
+    expect([fill.at(1, 1), colour.at(1, 1)]).toEqual([5, 6]);
+    history.redo();
+    expect([fill.at(1, 1), colour.at(1, 1)]).toEqual([0, 0]);
+
+    // A fill touches only the fill layer.
+    history.begin();
+    history.touch({ x: TILE, y: 0, width: 1, height: 1 }, 0);
+    fill.paint({ x: TILE, y: 0, width: 4, height: 4 }, 9);
+    colour.paint({ x: TILE, y: 0, width: 4, height: 4 }, 3);
+    history.commit();
+    history.undo();
+    expect([fill.at(TILE, 0), colour.at(TILE, 0)]).toEqual([0, 3]);
+  });
+});

@@ -30,8 +30,9 @@ the upgrade path instead of building it now.
   Safari's engine (WebKit) runs in the test automation (section 13), so
   nothing iPad-hostile slips in unnoticed.
 
-**Not in v1:** photo → line art, **tap-to-fill** (deferred 2026-11-16;
-design kept in section 8), the Crayon, Marker and Paint brushes,
+**Not in v1:** photo → line art (tap-to-fill was deferred on
+2026-11-16 and brought back on 2026-11-20; see section 8), the Crayon,
+Marker and Paint brushes,
 optional clip-to-lines, cross-device sync, the kids version (D1),
 dot-to-dot.
 
@@ -45,8 +46,8 @@ dot-to-dot.
 | Undo after reload | Not kept; the picture itself is | Persistent history | Same |
 | Zoom/pan | **CSS transform** on document-sized layers | Redrawing a viewport canvas every frame | Viewport renderer, if the spike shows CSS scaling isn't good enough |
 | Line art on screen | **The SVG itself**, overlaid | Rasterised line art | None needed |
-| Fill | **Deferred.** When it returns: precomputed region labels from our own clean SVGs | Live flood fill with tolerance + gap closing | Section 8 has the design |
-| Brushes | **Pencil only** (+ Eraser) | Crayon, Marker, Paint | Add brushes one at a time; the brush spec (7) is built to take more |
+| Fill | **Live scanline flood fill** over a wall mask of our own clean SVGs, on the main thread; fills go behind the pencil | Precomputed region labels in a worker; tolerance and gap closing | Move it to a worker, or precompute labels, if fills feel slow on the device (section 8) |
+| Brushes | **Pencil** (+ Eraser and Fill) | Crayon, Marker, Paint | Add brushes one at a time; the brush spec (7) is built to take more |
 
 ## 3. App structure
 
@@ -74,7 +75,8 @@ src/app/
   app.ts                  shell: <router-outlet>, install button
   app.config.ts           router (hash URLs, input binding), service worker
   library/                Library screen: plates, index tabs, in-progress
-  colouring/              Colouring screen: stage, tool roll, paint tin, mixer
+  colouring/              Colouring screen: stage, tool roll, paint tin
+    colour-sheet.ts       more colours: the mixer, recents, palettes
     debug-readout.ts      diagnostics and pencil tuning, behind the gear
   finished/               Finished screen: stamp, save/share/print
                           (an overlay on Colouring until saving arrives)
@@ -83,7 +85,8 @@ src/app/
     artwork.store.ts      IndexedDB: artworks, images, thumbnails
     prefs.service.ts      handedness, finger-draws-with-pen, recents, last tool
     export.ts             flatten → PNG, download, share sheet (print later)
-    field-guide.ts        index-tab categories, paint tin, plate numerals
+    field-guide.ts        index-tab categories, paint tin, palettes, plate numerals
+    line-art.ts           the SVG rasterised into fill walls
     app-updates.ts        switching to a new version (3.1)
   engine/                 plain TypeScript, no Angular, unit-testable
     document.ts           layers + document size
@@ -92,9 +95,10 @@ src/app/
     smoothing.ts          one-euro filter for pointer positions
     brush.ts              brush specs, pressure response, dab planner
     diagnostics.ts        event log and copyable report for device tests
-    history.ts            tile copy-on-write undo/redo
+    history.ts            tile copy-on-write undo/redo, over several layers
+    fill.ts               tap-to-fill: walls, scanline flood, grow under lines
+    colour.ts             hex/HSV, colour names, recent colours
     save.worker.ts        PNG encoding off the main thread
-    (later: fill-client.ts + fill.worker.ts, see section 8)
 ```
 
 `engine/` is kept free of Angular on purpose. The colouring component is
@@ -304,70 +308,64 @@ so adding one is mostly data plus tuning.
   the ends visibly thinner.
 - **Eraser** draws straight onto the colour layer with `destination-out`
   (as the sample does), so it never touches the lines.
-- **The tool roll in the mock-ups drops to two tools for v1:**
-  Pencil and Eraser, plus the size presets.
+- **The tool roll:** Pencil, Fill and Eraser, plus the size presets
+  (dimmed while Fill is chosen, as a fill has no size).
 - **The wet layer stays,** even with only Pencil. Overlapping dabs within
   one stroke would otherwise build up past the pencil's opacity, and the
   wet layer is also what makes cancelling a stroke on pinch free.
 
-## 8. Tap-to-fill (deferred; design kept for later)
+## 8. Tap-to-fill
 
-> **Not in v1** (owner, 2026-11-16). This section records the design so
-> it's ready when fill returns. Nothing else in v1 depends on it, and
-> nothing in v1 blocks it: the colour layer, the tile undo and the
-> versioned SVGs all work as fill needs them to. When it returns, add a
-> tap-versus-drag rule to the input state machine (section 6): with Fill
-> selected, a pointer-down and up with little movement is a fill at that
-> point.
+> Deferred on 2026-11-16 and brought back by the owner on 2026-11-20.
+> Built more simply than first designed: a live flood fill on each tap
+> rather than precomputed region labels in a worker, since a whole
+> 3072 page fills in tens of ms on a laptop. The diagnostics report logs
+> each fill's time; if it feels slow on the OnePlus, move it to a
+> worker or precompute labels (the earlier design, below).
 
-Because the library only uses our own clean SVGs, fill can be much simpler than
-the general flood fill in `CONTEXT.md` 5.2.
+**Fill is a tool**, aimed with a tap: with Fill chosen, a pointer that
+goes down and up within 16 screen px is a fill at that point; a drag
+does nothing. Pen, finger (outside pen mode) and mouse all fill, under
+the same palm rejection as drawing. A tap within 14 screen px of a
+shape (on a line, say) fills the nearest shape.
 
-**On opening a picture** (in `fill.worker.ts`):
+**On opening a picture** (`core/line-art.ts`): the SVG is drawn at
+document size to a canvas and its alpha thresholded (≥ 64) into a wall
+mask, one byte per pixel. Drawing doesn't wait for it; a fill tapped
+before it's ready waits.
 
-1. Render the SVG at document size to an `OffscreenCanvas`.
-2. Threshold its alpha into a wall mask: line or not line.
-3. Run a single connected-component pass to build a **region label
-   map** (`Uint16Array`, one label per pixel, 0 for lines), plus each
-   region's bounding box.
+**On tap** (`engine/fill.ts`):
 
-That takes roughly 100–300 ms in a worker. Building it on open is fine
-for v1; caching it in IndexedDB per picture version is an easy later
-win.
-
-**On tap:**
-
-1. Look up the label under the tap point. A tap on a line picks the
-   nearest region.
-2. The worker builds that region's mask within its bounding box,
-   **grown by a few pixels into neighbouring line pixels**. The colour
-   tucks under the lines, so no pale halo shows, and the line drawn on
-   top hides the overlap.
-3. The main thread draws that patch onto the colour layer
-   (`source-over`, in the current colour).
-
-This makes taps effectively instant, because there's no search at tap
-time.
+1. A scanline flood over the open pixels from the tap point gives the
+   shape and its bounding box.
+2. The shape is **grown 3 px into neighbouring line pixels** (never
+   into open paper on the far side). The colour tucks under the lines,
+   so no pale halo shows at their soft edges, and the lines drawn on
+   top hide the overlap. Our lines are 6-9 px wide at document size.
+3. The shape is painted fully opaque onto the **fill layer**, as one
+   undo step (only fill-layer tiles are snapshotted).
 
 **The shape a fill covers is always set by the lines**, never by colour
 already painted. A "paint bucket" that stops at earlier strokes was
 ruled out: it would leak into the gaps of grainy pencil strokes, leave
-specks, and couldn't be precomputed.
+specks, and couldn't be precomputed. On the blank page there are no
+lines, so a fill covers the whole page.
 
-**To decide when fill returns: what happens to pencil already inside
-the shape.** The recommendation is "goes behind", because it never
-destroys the user's strokes (`CONTEXT.md` section 4):
+**Fills go behind the pencil** (decision 15). They live on their own
+layer under the colour layer, so shading stays visible on top whichever
+order you work in, and filling a shape again just changes its base
+colour. The cost is one more document-sized canvas (CPU-backed, for
+undo readback), and the eraser now clears both layers. Undo covers both
+layers in one history; each tile copy remembers its layer.
 
-- **Covers (current design):** the fill replaces everything in the
-  shape, pencil included. It needs no extra layer.
-- **Goes behind:** fills live on their own layer under the pencil, so
-  shading stays visible on top whichever order you work in, and
-  re-filling just changes the base colour. It costs one more
-  document-sized canvas, and the eraser needs a rule (most likely: it
-  erases both layers).
-
-**No gap closing in v1.** Library art must have closed regions, and the
+**No gap closing.** Library art must have closed regions, and the
 authoring check in section 10 enforces it.
+
+The earlier design, kept in case speed needs it: on open, a worker runs
+one connected-component pass over the wall mask to build a region label
+map (`Uint16Array`) with each region's bounding box, so a tap is just a
+lookup. Roughly 100-300 ms per picture, and cacheable per picture
+version.
 
 ## 9. Undo, redo and saving
 
@@ -643,7 +641,12 @@ first, then the utilities, then more pictures.
 4. **Persistence:** autosave, reopen, thumbnails, "Specimens in
    progress"; Finished becomes its own route with the stamp.
 5. **Colour and tools:** the mixer, more palettes, recent colours; more
-   brushes one at a time.
+   brushes one at a time. Started 2026-11-20 on request: **tap-to-fill**
+   (section 8) and **the colour sheet**: the ＋ on the paint tin opens
+   a mixer (shade square and hue strip), the 8 most recent colours used
+   that aren't in the tin (kept on the device), and Pastels, Earth,
+   Skin tones and Greys. A mixed colour is named in words ("pale
+   blue").
 6. **Library content:** `check-pictures`, the 5 launch plates. Started
    early on request (2026-11-19): a butterfly, a princess castle, a moon
    and stars, and a blank page ("Tabula rasa", plate 0: no number or
@@ -653,8 +656,7 @@ first, then the utilities, then more pictures.
 New versions (3.1) were handled in milestone 2, because every device
 test needs them.
 
-After v1, in rough order: tap-to-fill (section 8), more brushes (7),
-photo → line art (12).
+After v1, in rough order: more brushes (7), photo → line art (12).
 
 To look into later (owner's idea, 2026-11-19): **haptics while drawing
 with the pen**, a light vibration that makes the stroke feel like pencil
@@ -680,9 +682,8 @@ Answered by the owner on 2026-11-16:
 
 1. **Undo lost on reload:** yes, acceptable for v1.
 2. **Brushes:** **Pencil only** to start (plus the Eraser).
-3. **Tap-to-fill:** **deferred** out of v1. The design is kept in
-   section 8, including the open choice between "covers" and "goes
-   behind" (recommended: goes behind).
+3. **Tap-to-fill:** **deferred** out of v1. *(Reversed 2026-11-20:
+   built in milestone 5; see decision 15.)*
 4. **Document sizes:** 2048/3072, confirmed by the spike.
 5. **Launch library:** 5 pictures.
 6. **Navigation:** use the Angular Router (owner's suggestion, for
@@ -732,3 +733,14 @@ From the owner, 2026-11-19:
     - Only categories that have plates get an index tab.
     - Fonts are bundled from `@fontsource` (Latin only), so they work
       offline.
+
+From the owner, 2026-11-20:
+
+15. **Tap-to-fill and more colours, now.** Fill is back (section 8). It
+    was built with the design's recommendation for the open choice:
+    **fills go behind the pencil**, on their own layer, so no fill ever
+    hides a stroke. Easy to flip to "covers" if it feels wrong on the
+    device: paint the fill onto the colour layer instead. The colour
+    sheet follows `CONTEXT.md` 9 (the ＋ on the dock), but recent
+    colours live in the sheet rather than on the tin, so the tin stays
+    16 pans wide on a phone.

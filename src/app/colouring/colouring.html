@@ -10,6 +10,7 @@
 >
   <div class="page" #page [class.ready]="docSize()">
     <div class="paper"></div>
+    <canvas #fillCanvas class="layer fill"></canvas>
     <canvas #colourCanvas class="layer colour"></canvas>
     <canvas #wetCanvas class="layer wet"></canvas>
     @if (picture(); as p) {
@@ -59,13 +60,20 @@
       <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L16 4l4 4L9 19z" /><path d="M14 6l4 4" /></svg>
       <span>Pencil</span>
     </button>
+    <button type="button" class="tool" [class.on]="tool() === 'fill'" [attr.aria-pressed]="tool() === 'fill'" (click)="tool.set('fill')">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M3.5 12.5l7-7 7.5 7.5-7 7z" /><path d="M3.5 12.5h14.5" /><path d="M10.5 5.5L8 3" />
+        <path d="M20.5 14.5c1 1.4 1.5 2.4 1.5 3.2a1.5 1.5 0 0 1-3 0c0-.8.5-1.8 1.5-3.2z" />
+      </svg>
+      <span>Fill</span>
+    </button>
     <button type="button" class="tool" [class.on]="tool() === 'eraser'" [attr.aria-pressed]="tool() === 'eraser'" (click)="tool.set('eraser')">
       <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l9-9 6 6-7 7H8z" /><path d="M9 11l6 6" /></svg>
       <span>Eraser</span>
     </button>
   </div>
   <span class="stitch" aria-hidden="true"></span>
-  <div class="sizes" role="group" aria-label="Size">
+  <div class="sizes" role="group" aria-label="Size" [class.idle]="tool() === 'fill'">
     <span class="label">Size</span>
     @for (i of sizes; track i) {
       <button
@@ -101,6 +109,18 @@
       ></button>
     }
   </div>
+  <button
+    type="button"
+    class="more"
+    aria-label="More colours"
+    [attr.aria-expanded]="sheetOpen()"
+    (click)="toggleSheet()"
+  >
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+  </button>
+  @if (sheetOpen()) {
+    <app-colour-sheet [hex]="paint().hex" [recents]="recents()" (choose)="choosePaint($event)" (close)="sheetOpen.set(false)" />
+  }
 </div>
 
 <button

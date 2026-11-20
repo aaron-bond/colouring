@@ -1,6 +1,11 @@
 // The colouring document (TECHNICAL-DESIGN.md 5): a colour layer whose
-// pixels are the artwork, a wet layer for the stroke in progress, and
-// tile undo over the colour layer. Coordinates are document pixels.
+// pixels are the pencil work, a fill layer under it for tap-to-fill, a
+// wet layer for the stroke in progress, and tile undo over the fill and
+// colour layers. Coordinates are document pixels.
+//
+// Fills go behind the pencil (section 8, decision 15): shading stays on
+// top whichever order things are done in, and filling a shape again just
+// changes its base colour. The eraser clears both layers.
 //
 // The colour layer is CPU-backed (`willReadFrequently`): undo reads tiles
 // back on every commit, and on the OnePlus that was 3-5x faster than from
@@ -9,10 +14,28 @@
 // rather than copying the wet pixels across (16, decision 11).
 
 import { BrushSpec, Dab, SIZE_FRACTIONS, StrokePlanner } from './brush';
+import { hexToRgb } from './colour';
+import { FillMap, paintRegion } from './fill';
 import { Rect, Size, TileHistory, canvasSurface, tileKeysIn, tileRect } from './history';
 import { Point } from './viewport';
 
 export const UNDO_BUDGET_BYTES = 150 * 1024 * 1024;
+
+// Layers in the undo history.
+const FILL = 0;
+const COLOUR = 1;
+
+export interface DocumentCanvases {
+  fill: HTMLCanvasElement;
+  colour: HTMLCanvasElement;
+  wet: HTMLCanvasElement;
+}
+
+export interface FillResult {
+  // Pixels painted, and the area they lie in.
+  pixels: number;
+  rect: Rect;
+}
 
 interface Stroke {
   brush: BrushSpec;
@@ -25,24 +48,53 @@ interface Stroke {
 }
 
 export class ColourDocument {
+  private readonly fillCtx: CanvasRenderingContext2D;
   private readonly colourCtx: CanvasRenderingContext2D;
   private readonly wetCtx: CanvasRenderingContext2D;
   private readonly history: TileHistory<ImageData>;
   private stroke: Stroke | null = null;
+  // The line art as walls, once it has been rasterised (setLineArt).
+  private fillMap: FillMap | null = null;
 
   constructor(
-    colourCanvas: HTMLCanvasElement,
-    wetCanvas: HTMLCanvasElement,
+    canvases: DocumentCanvases,
     readonly size: Size,
     budgetBytes = UNDO_BUDGET_BYTES,
   ) {
-    for (const canvas of [colourCanvas, wetCanvas]) {
+    for (const canvas of [canvases.fill, canvases.colour, canvases.wet]) {
       canvas.width = size.width;
       canvas.height = size.height;
     }
-    this.colourCtx = colourCanvas.getContext('2d', { willReadFrequently: true })!;
-    this.wetCtx = wetCanvas.getContext('2d')!;
-    this.history = new TileHistory(canvasSurface(this.colourCtx), budgetBytes);
+    // Both read back for undo, so both are CPU-backed.
+    this.fillCtx = canvases.fill.getContext('2d', { willReadFrequently: true })!;
+    this.colourCtx = canvases.colour.getContext('2d', { willReadFrequently: true })!;
+    this.wetCtx = canvases.wet.getContext('2d')!;
+    this.history = new TileHistory([canvasSurface(this.fillCtx), canvasSurface(this.colourCtx)], budgetBytes);
+  }
+
+  // The line art's wall mask (fill.ts), one byte per document pixel.
+  setLineArt(walls: Uint8Array): void {
+    this.fillMap = new FillMap(walls, this.size.width, this.size.height);
+  }
+
+  get canFill(): boolean {
+    return this.fillMap !== null;
+  }
+
+  // Fills the shape at `at` with `colour`, as one undo step. A tap within
+  // `reach` document pixels of a shape (on a line, say) fills that shape.
+  fill(at: Point, colour: string, reach: number): FillResult | null {
+    if (!this.fillMap || this.stroke) return null;
+    const region = this.fillMap.region(Math.floor(at.x), Math.floor(at.y), Math.ceil(reach));
+    if (!region) return null;
+    const { rect } = region;
+    this.history.begin();
+    this.history.touch(rect, FILL);
+    const pixels = this.fillCtx.getImageData(rect.x, rect.y, rect.width, rect.height);
+    paintRegion(region, pixels.data, hexToRgb(colour));
+    this.fillCtx.putImageData(pixels, rect.x, rect.y);
+    this.history.commit();
+    return { pixels: region.count, rect };
   }
 
   get canUndo(): boolean {
@@ -74,7 +126,8 @@ export class ColourDocument {
     if (this.stroke) this.cancelStroke();
     const planner = new StrokePlanner(brush, this.baseRadius(sizeIndex), at, pressure);
     this.stroke = { brush, colour, planner, tiles: new Set(), dabs: [] };
-    // The eraser changes the colour layer directly, snapshotting as it goes.
+    // The eraser changes the fill and colour layers directly, snapshotting
+    // as it goes.
     if (brush.erases) this.history.begin();
     this.paint([planner.first()]);
   }
@@ -99,7 +152,7 @@ export class ColourDocument {
     // Only the tiles the stroke actually crossed are snapshotted and
     // composited, not its whole bounding box (11.1).
     this.history.begin();
-    for (const key of stroke.tiles) this.history.touchTile(key);
+    for (const key of stroke.tiles) this.history.touchTile(key, COLOUR);
     drawDabs(this.colourCtx, stroke.dabs, stroke.colour);
     for (const key of stroke.tiles) this.clearWetTile(key);
     this.history.commit();
@@ -111,7 +164,7 @@ export class ColourDocument {
     if (!stroke) return;
     this.stroke = null;
     if (stroke.brush.erases) {
-      // Already applied to the colour layer: put the tiles back.
+      // Already applied to the layers: put the tiles back.
       this.history.rollback();
       return;
     }
@@ -140,10 +193,14 @@ export class ColourDocument {
       for (const key of tileKeysIn(this.dabBounds(dab), this.size)) {
         if (stroke.tiles.has(key)) continue;
         stroke.tiles.add(key);
-        if (erases) this.history.touchTile(key);
+        if (erases) {
+          this.history.touchTile(key, FILL);
+          this.history.touchTile(key, COLOUR);
+        }
       }
     }
     if (erases) {
+      drawDabs(this.fillCtx, dabs, '#000', 'destination-out');
       drawDabs(this.colourCtx, dabs, '#000', 'destination-out');
     } else {
       drawDabs(this.wetCtx, dabs, stroke.colour);

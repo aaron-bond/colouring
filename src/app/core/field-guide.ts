@@ -1,5 +1,8 @@
 // The field guide's fixed content (docs/CONTEXT.md 9, theme C1): index-tab
-// categories, the paint tin's colours, and plate numbering.
+// categories, the paint tin's colours, the colour sheet's palettes, and
+// plate numbering.
+
+import { colourName } from '../engine/colour';
 
 export interface Category {
   id: string;
@@ -28,7 +31,7 @@ export interface Paint {
 }
 
 // The paint tin: bright colours on the first row, soft and earthy ones on
-// the second. More colours (the mixer, palettes) come later.
+// the second. More are in the colour sheet (PALETTES and the mixer).
 export const PAINTS: Paint[] = [
   { name: 'scarlet', hex: '#F03E3E' },
   { name: 'orange', hex: '#FD7E14' },
@@ -49,6 +52,80 @@ export const PAINTS: Paint[] = [
 ];
 
 export const DEFAULT_PAINT = PAINTS[7];
+
+export interface Palette {
+  name: string;
+  paints: Paint[];
+}
+
+// The colour sheet's palettes (docs/CONTEXT.md 9: Pastels, Earth, Skin
+// tones, Greys), eight each.
+export const PALETTES: Palette[] = [
+  {
+    name: 'Pastels',
+    paints: [
+      { name: 'blush', hex: '#F9C6CF' },
+      { name: 'peach', hex: '#FFD8B5' },
+      { name: 'butter', hex: '#FFF1A8' },
+      { name: 'mint', hex: '#C8F0C8' },
+      { name: 'sea glass', hex: '#B8E6E0' },
+      { name: 'powder blue', hex: '#BFDBFE' },
+      { name: 'lilac', hex: '#D9C8F5' },
+      { name: 'orchid', hex: '#EBC7E8' },
+    ],
+  },
+  {
+    name: 'Earth',
+    paints: [
+      { name: 'ochre', hex: '#C99A2E' },
+      { name: 'terracotta', hex: '#C4623A' },
+      { name: 'rust', hex: '#9C3D1F' },
+      { name: 'olive', hex: '#7D7A3A' },
+      { name: 'moss', hex: '#5E7A3A' },
+      { name: 'clay', hex: '#B5876A' },
+      { name: 'sand', hex: '#D8C3A0' },
+      { name: 'bark', hex: '#4A3628' },
+    ],
+  },
+  {
+    name: 'Skin tones',
+    paints: [
+      { name: 'porcelain', hex: '#FBE3D3' },
+      { name: 'ivory', hex: '#F3CFB3' },
+      { name: 'beige', hex: '#E5B48F' },
+      { name: 'honey', hex: '#D19A6E' },
+      { name: 'tan', hex: '#B47E57' },
+      { name: 'caramel', hex: '#946140' },
+      { name: 'chestnut', hex: '#6F4630' },
+      { name: 'espresso', hex: '#4A2E22' },
+    ],
+  },
+  {
+    name: 'Greys',
+    paints: [
+      { name: 'white', hex: '#FFFFFF' },
+      { name: 'mist', hex: '#E9ECEF' },
+      { name: 'silver', hex: '#CED4DA' },
+      { name: 'pebble', hex: '#ADB5BD' },
+      { name: 'ash', hex: '#6C757D' },
+      { name: 'iron', hex: '#495057' },
+      { name: 'charcoal', hex: '#343A40' },
+      { name: 'ink black', hex: '#111111' },
+    ],
+  },
+];
+
+// The tin's own paint for `hex` if it has one (so its pan lights up),
+// else a named palette colour, else a mixed colour named in words.
+export function paintFor(hex: string): Paint {
+  const up = hex.toUpperCase();
+  const named = [...PAINTS, ...PALETTES.flatMap((p) => p.paints)].find((p) => p.hex.toUpperCase() === up);
+  return named ?? { name: colourName(up), hex: up };
+}
+
+export function inTin(hex: string): boolean {
+  return PAINTS.some((p) => p.hex.toUpperCase() === hex.toUpperCase());
+}
 
 const TAPES = ['yellow', 'pink', 'green', 'violet', 'blue'];
 

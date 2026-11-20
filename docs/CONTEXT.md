@@ -48,7 +48,7 @@ A colouring app for **both adults and children**:
 
 | Topic | Decision | Notes |
 | --- | --- | --- |
-| **Fill model** | **Both** freehand brushes **and** tap-to-fill; **tap-to-fill deferred out of v1 (2026-11-16)** | Kids can scribble, and adults can fill hundreds of small regions without hours of strokes. See 5.2 for the technical consequence. v1 ships Pencil and Eraser only; the fill design is kept in `TECHNICAL-DESIGN.md` section 8. |
+| **Fill model** | **Both** freehand brushes **and** tap-to-fill; tap-to-fill deferred out of v1 (2026-11-16), **then brought back (2026-11-20)** | Kids can scribble, and adults can fill hundreds of small regions without hours of strokes. See 5.2 for the technical consequence. Built as in `TECHNICAL-DESIGN.md` section 8. |
 | **Line-art source** | **SVG files** for the library, plus **photo → line art** conversion | Code-drawn art (how the sample does it) doesn't scale to detailed designs. AI-generated art was considered and not chosen for now. |
 | **Stack** | **Same as the handwriting app** | Angular 22 with standalone components only and signals for state, Vitest unit tests, a static PWA on GitHub Pages via a GitHub Actions deploy to `gh-pages`. Lets the sample code carry straight over and reuses known deployment. See the handwriting repo's `CLAUDE.md` for how it's set up (PWA install button, fullscreen display mode, safe-area padding, base-href). |
 | **Photo → line art** | **Deferred (2026-11-16)** | Left out of v1 to keep the first version simpler. v1 uses only the SVG library. `TECHNICAL-DESIGN.md` section 12 covers how it slots back in. |
@@ -367,8 +367,8 @@ https://claude.ai/artifact/Td9TKygaeBauAtF3jB9dcw (tablet landscape,
 2. Brush size: 5 presets, or a slider for finer control?
 3. Opacity control: needed in version 1? It's left out for now.
 4. *(Narrowed 2026-11-16: the fill's shape is always set by the lines.
-   Still open: does a fill cover pencil already inside the shape, or go
-   behind it? See `TECHNICAL-DESIGN.md` section 8.)* **What does Fill stop at?** The recommendation is **lines only**,
+   Built 2026-11-20 with fills going **behind** the pencil, as
+   recommended; see `TECHNICAL-DESIGN.md` section 8 and decision 15.)* **What does Fill stop at?** The recommendation is **lines only**,
    ignoring colour already painted. That makes fills deterministic and
    replayable, so the undo log can double as autosave (5.3, 5.6).
    Stopping at existing colour too feels more like a paint program, but

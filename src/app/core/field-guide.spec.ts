@@ -1,4 +1,4 @@
-import { CATEGORIES, PAINTS, categoryOf, plateLabel, roman, tapeFor } from './field-guide';
+import { CATEGORIES, PAINTS, PALETTES, categoryOf, inTin, paintFor, plateLabel, roman, tapeFor } from './field-guide';
 
 describe('field guide', () => {
   it('writes plate numbers in Roman numerals', () => {
@@ -19,5 +19,15 @@ describe('field guide', () => {
     expect(new Set(PAINTS.map((p) => p.hex)).size).toBe(16);
     expect(tapeFor(0)).toBeTruthy();
     expect(tapeFor(123)).toBeTruthy();
+  });
+
+  it('has four palettes of eight, and names any colour', () => {
+    expect(PALETTES.map((p) => p.paints.length)).toEqual([8, 8, 8, 8]);
+    // The tin's own object comes back, so its pan lights up.
+    expect(paintFor('#f03e3e')).toBe(PAINTS[0]);
+    expect(paintFor('#BFDBFE').name).toBe('powder blue');
+    expect(paintFor('#123456')).toEqual({ name: 'deep blue', hex: '#123456' });
+    expect(inTin('#F06595')).toBe(true);
+    expect(inTin('#BFDBFE')).toBe(false);
   });
 });

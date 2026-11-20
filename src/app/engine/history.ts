@@ -9,7 +9,9 @@
 // entries are dropped once the stack goes over its byte budget.
 //
 // Generic over the pixel store so it can be unit tested without a
-// canvas: production uses a CanvasRenderingContext2D surface.
+// canvas: production uses a CanvasRenderingContext2D surface. One history
+// can cover several same-sized layers (the fill layer and the colour
+// layer): each tile copy remembers which layer it came from.
 
 export const TILE = 256;
 
@@ -60,8 +62,8 @@ export function tileRect(key: number, size: Size): Rect {
 }
 
 interface Entry<T> {
-  // Tile key -> copy of that tile.
-  tiles: Map<number, { rect: Rect; pixels: T }>;
+  // Tile key and layer -> copy of that tile (see slot()).
+  tiles: Map<number, { layer: number; rect: Rect; pixels: T }>;
   bytes: number;
 }
 
@@ -69,12 +71,20 @@ export class TileHistory<T> {
   private undoStack: Entry<T>[] = [];
   private redoStack: Entry<T>[] = [];
   private current: Entry<T> | null = null;
+  private readonly surfaces: PixelSurface<T>[];
 
   constructor(
-    private readonly surface: PixelSurface<T>,
+    // One surface, or several layers of the same size.
+    surfaces: PixelSurface<T> | PixelSurface<T>[],
     // Total bytes kept across the undo and redo stacks.
     private readonly budgetBytes: number,
-  ) {}
+  ) {
+    this.surfaces = Array.isArray(surfaces) ? surfaces : [surfaces];
+  }
+
+  private get size(): Size {
+    return this.surfaces[0];
+  }
 
   get canUndo(): boolean {
     return this.undoStack.length > 0;
@@ -100,19 +110,22 @@ export class TileHistory<T> {
 
   // Call before changing pixels inside `rect`: copies every tile it
   // overlaps that this operation hasn't copied yet.
-  touch(rect: Rect): void {
-    for (const key of tileKeysIn(rect, this.surface)) this.touchTile(key);
+  touch(rect: Rect, layer = 0): void {
+    for (const key of tileKeysIn(rect, this.size)) this.touchTile(key, layer);
   }
 
-  // Copies one tile (by key, see tileKeysIn) if this operation hasn't yet.
-  touchTile(key: number): void {
+  // Copies one tile (by key, see tileKeysIn) of one layer, if this
+  // operation hasn't yet.
+  touchTile(key: number, layer = 0): void {
     const entry = this.current;
     if (!entry) throw new Error('TileHistory.touch() outside begin()/commit()');
-    if (entry.tiles.has(key)) return;
-    const rect = tileRect(key, this.surface);
-    const pixels = this.surface.read(rect);
-    entry.tiles.set(key, { rect, pixels });
-    entry.bytes += this.surface.bytes(pixels);
+    const slot = key * this.surfaces.length + layer;
+    if (entry.tiles.has(slot)) return;
+    const surface = this.surfaces[layer];
+    const rect = tileRect(key, surface);
+    const pixels = surface.read(rect);
+    entry.tiles.set(slot, { layer, rect, pixels });
+    entry.bytes += surface.bytes(pixels);
   }
 
   commit(): void {
@@ -151,7 +164,7 @@ export class TileHistory<T> {
     const entry = this.current;
     this.current = null;
     if (!entry) return;
-    for (const { rect, pixels } of entry.tiles.values()) this.surface.write(pixels, rect.x, rect.y);
+    for (const { layer, rect, pixels } of entry.tiles.values()) this.surfaces[layer].write(pixels, rect.x, rect.y);
   }
 
   clear(): void {
@@ -163,11 +176,12 @@ export class TileHistory<T> {
   // Writes the entry's tiles back, returning the entry that undoes that.
   private swap(entry: Entry<T>): Entry<T> {
     const opposite: Entry<T> = { tiles: new Map(), bytes: 0 };
-    for (const [key, { rect, pixels }] of entry.tiles) {
-      const now = this.surface.read(rect);
-      opposite.tiles.set(key, { rect, pixels: now });
-      opposite.bytes += this.surface.bytes(now);
-      this.surface.write(pixels, rect.x, rect.y);
+    for (const [slot, { layer, rect, pixels }] of entry.tiles) {
+      const surface = this.surfaces[layer];
+      const now = surface.read(rect);
+      opposite.tiles.set(slot, { layer, rect, pixels: now });
+      opposite.bytes += surface.bytes(now);
+      surface.write(pixels, rect.x, rect.y);
     }
     return opposite;
   }

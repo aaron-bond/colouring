@@ -3,8 +3,10 @@ import { Router, RouterLink } from '@angular/router';
 import { AppUpdates } from '../core/app-updates';
 import { CatalogueService, Picture, documentSize } from '../core/catalogue.service';
 import { flatten } from '../core/export';
-import { DEFAULT_PAINT, PAINTS, Paint, plateLabel } from '../core/field-guide';
+import { DEFAULT_PAINT, PAINTS, Paint, inTin, plateLabel } from '../core/field-guide';
+import { lineArtWalls } from '../core/line-art';
 import { BrushId, ERASER, FIXED_PRESSURE, PENCIL, SIZE_FRACTIONS } from '../engine/brush';
+import { withRecent } from '../engine/colour';
 import { Diagnostics, megabytes } from '../engine/diagnostics';
 import { DEFAULT_HAPTICS, HapticCall, HapticSettings, HapticStroke } from '../engine/haptics';
 import { ColourDocument } from '../engine/document';
@@ -12,6 +14,7 @@ import { InputAction, InputMachine, PointerSample } from '../engine/input';
 import { PointSmoother } from '../engine/smoothing';
 import { Insets, NO_INSETS, Point, Size, View, clampPan, fitView, panBy, pinchView, toDoc, zoomAt } from '../engine/viewport';
 import { Finished } from '../finished/finished';
+import { ColourSheet } from './colour-sheet';
 import { DebugReadout, PencilTuning, ReadoutLine } from './debug-readout';
 
 // The colouring screen (TECHNICAL-DESIGN.md 3, 5, 6), in the C1 theme. A
@@ -23,10 +26,18 @@ import { DebugReadout, PencilTuning, ReadoutLine } from './debug-readout';
 const FIT_GAP = 12;
 // The size presets' dots on the tool roll, in px.
 const DOT_SIZES = [6, 10, 14, 20, 26];
+// With Fill, a touch that moves less than this (screen px) is a tap.
+const TAP_SLOP = 16;
+// A tap this close (screen px) to a shape, on a line say, fills it.
+const FILL_REACH = 14;
+// Recent colours are kept on the device (a small preference, not work).
+const RECENTS_KEY = 'colouring.recentColours';
+
+export type Tool = BrushId | 'fill';
 
 @Component({
   selector: 'app-colouring',
-  imports: [RouterLink, DebugReadout, Finished],
+  imports: [RouterLink, ColourSheet, DebugReadout, Finished],
   templateUrl: './colouring.html',
   styleUrl: './colouring.css',
 })
@@ -36,6 +47,7 @@ export class Colouring {
 
   private readonly stageRef = viewChild.required<ElementRef<HTMLDivElement>>('stage');
   private readonly pageRef = viewChild.required<ElementRef<HTMLDivElement>>('page');
+  private readonly fillRef = viewChild.required<ElementRef<HTMLCanvasElement>>('fillCanvas');
   private readonly colourRef = viewChild.required<ElementRef<HTMLCanvasElement>>('colourCanvas');
   private readonly wetRef = viewChild.required<ElementRef<HTMLCanvasElement>>('wetCanvas');
   private readonly topBarRef = viewChild.required<ElementRef<HTMLElement>>('topBar');
@@ -49,12 +61,15 @@ export class Colouring {
 
   protected readonly picture = signal<Picture | null>(null);
   protected readonly docSize = signal<Size | null>(null);
-  protected readonly tool = signal<BrushId>('pencil');
+  protected readonly tool = signal<Tool>('pencil');
   protected readonly sizeIndex = signal(2);
   protected readonly sizes = SIZE_FRACTIONS.map((_, i) => i);
   protected readonly dotSizes = DOT_SIZES;
   protected readonly paints = PAINTS;
   protected readonly paint = signal<Paint>(DEFAULT_PAINT);
+  // Colours used lately that aren't in the tin, newest first.
+  protected readonly recents = signal<string[]>(loadRecents());
+  protected readonly sheetOpen = signal(false);
   protected readonly plateNo = computed(() => plateLabel(this.picture()?.plate ?? 0).toLowerCase());
   protected readonly zoomPercent = signal(100);
   protected readonly finishedOpen = signal(false);
@@ -101,6 +116,11 @@ export class Colouring {
   private hapticAt: Point | null = null;
   private lastHapticPulses = 0;
   private lastVibrate = 'not called';
+  // A touch with Fill: where it started and how far it has wandered.
+  private fillTap: { at: PointerSample; moved: number } | null = null;
+  // The line art's walls, rasterised after the picture opens.
+  private lineArt: Promise<void> | null = null;
+  private lastFill = '-';
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -167,7 +187,11 @@ export class Colouring {
     }
     const svg = await fetch(picture.svg).then((res) => res.text());
     const size = documentSize(svg, picture.docLongSide);
-    this.doc = new ColourDocument(this.colourRef().nativeElement, this.wetRef().nativeElement, size);
+    const doc = new ColourDocument(
+      { fill: this.fillRef().nativeElement, colour: this.colourRef().nativeElement, wet: this.wetRef().nativeElement },
+      size,
+    );
+    this.doc = doc;
     const page = this.pageRef().nativeElement;
     page.style.width = `${size.width}px`;
     page.style.height = `${size.height}px`;
@@ -176,6 +200,14 @@ export class Colouring {
     this.diagnostics.log(`opened ${picture.id} · document ${size.width}×${size.height}`);
     this.fit();
     this.applyView();
+    // Fill needs the lines as walls; drawing doesn't wait for them.
+    const t0 = performance.now();
+    this.lineArt = lineArtWalls(picture.svg, size)
+      .then((walls) => {
+        doc.setLineArt(walls);
+        this.diagnostics.log(`line art ready for fill in ${Math.round(performance.now() - t0)} ms`);
+      })
+      .catch((err: unknown) => this.diagnostics.log(`line art failed: ${String(err)}`));
   }
 
   // ---- Pointer input -------------------------------------------------------
@@ -183,6 +215,8 @@ export class Colouring {
   protected onPointerDown(e: PointerEvent): void {
     if (!this.doc) return;
     e.preventDefault();
+    // Touching the page puts the colour sheet away.
+    this.sheetOpen.set(false);
     try {
       this.stageRef().nativeElement.setPointerCapture(e.pointerId);
     } catch {
@@ -249,15 +283,25 @@ export class Colouring {
         case 'stroke-start': {
           const s = action.sample;
           this.updates.markBusy();
+          const tool = this.tool();
+          if (tool === 'fill') {
+            this.fillTap = { at: s, moved: 0 };
+            break;
+          }
           this.smoother = this.smoothing() ? new PointSmoother() : null;
-          const brush = this.tool() === 'eraser' ? ERASER : { ...PENCIL, ...this.tuning() };
+          const brush = tool === 'eraser' ? ERASER : { ...PENCIL, ...this.tuning() };
           const pressure = this.pressureOf(s);
           doc.beginStroke(brush, this.paint().hex, this.sizeIndex(), this.toDocPoint(s), pressure);
-          this.diagnostics.strokeStart(s.kind, this.tool(), pressure);
+          this.diagnostics.strokeStart(s.kind, tool, pressure);
           this.startHaptics(s);
           break;
         }
         case 'stroke-move': {
+          const tap = this.fillTap;
+          if (tap) {
+            for (const s of action.samples) tap.moved = Math.max(tap.moved, Math.hypot(s.x - tap.at.x, s.y - tap.at.y));
+            break;
+          }
           const t0 = performance.now();
           const pressures = action.samples.map((s) => this.pressureOf(s));
           doc.extendStroke(action.samples.map((s, i) => ({ at: this.toDocPoint(s), pressure: pressures[i] })));
@@ -266,15 +310,27 @@ export class Colouring {
           break;
         }
         case 'stroke-end': {
+          const tap = this.fillTap;
+          if (tap) {
+            this.fillTap = null;
+            // A drag with Fill does nothing: only a tap aims a fill.
+            if (tap.moved < TAP_SLOP) void this.fillAt(tap.at);
+            break;
+          }
           const t0 = performance.now();
           doc.endStroke();
           this.endHaptics();
           this.dirty = true;
+          if (this.tool() !== 'eraser') this.used(this.paint().hex);
           this.diagnostics.strokeEnd('committed', performance.now() - t0, this.undoText());
           this.refreshHistory();
           break;
         }
         case 'stroke-cancel':
+          if (this.fillTap) {
+            this.fillTap = null;
+            break;
+          }
           doc.cancelStroke();
           this.endHaptics();
           this.diagnostics.strokeEnd('cancelled', 0, this.undoText());
@@ -299,12 +355,47 @@ export class Colouring {
     }
   }
 
+  // Fills the shape under a tap with the current colour.
+  private async fillAt(s: PointerSample): Promise<void> {
+    const doc = this.doc;
+    if (!doc) return;
+    const at = toDoc(this.view, s);
+    const reach = FILL_REACH / this.view.scale;
+    const colour = this.paint().hex;
+    if (!doc.canFill) await this.lineArt;
+    const t0 = performance.now();
+    const result = doc.fill(at, colour, reach);
+    const ms = performance.now() - t0;
+    if (!result) {
+      this.lastFill = `missed at ${Math.round(at.x)},${Math.round(at.y)}`;
+      this.diagnostics.log(`fill: ${this.lastFill}`);
+      return;
+    }
+    this.lastFill = `${result.pixels.toLocaleString('en')} px in ${ms.toFixed(1)} ms`;
+    this.diagnostics.log(`fill ${this.lastFill} · ${this.undoText()}`);
+    this.dirty = true;
+    this.used(colour);
+    this.refreshHistory();
+  }
+
+  // Remembers a colour that went on the page, unless the tin has it.
+  private used(hex: string): void {
+    if (inTin(hex)) return;
+    this.recents.update((r) => withRecent(r, hex));
+    try {
+      localStorage.setItem(RECENTS_KEY, JSON.stringify(this.recents()));
+    } catch {
+      // Private mode or blocked storage: recents just don't persist.
+    }
+  }
+
   private onKey(e: KeyboardEvent): void {
     if (e.code === 'Space') {
       this.input.spaceHeld = e.type === 'keydown';
       if (e.target === document.body) e.preventDefault();
       return;
     }
+    if (e.type === 'keydown' && e.key === 'Escape') this.sheetOpen.set(false);
     if (e.type !== 'keydown' || !(e.ctrlKey || e.metaKey)) return;
     const key = e.key.toLowerCase();
     if (key === 'z' && !e.shiftKey) {
@@ -335,9 +426,14 @@ export class Colouring {
     this.fitted = true;
   }
 
+  // Picking a colour keeps Fill, but switches the eraser back to Pencil.
   protected choosePaint(p: Paint): void {
     this.paint.set(p);
-    this.tool.set('pencil');
+    if (this.tool() === 'eraser') this.tool.set('pencil');
+  }
+
+  protected toggleSheet(): void {
+    this.sheetOpen.update((open) => !open);
   }
 
   // ---- Finished and leaving --------------------------------------------------
@@ -350,7 +446,8 @@ export class Colouring {
     this.finishedPng.set(null);
     this.finishedOpen.set(true);
     const t0 = performance.now();
-    flatten(this.colourRef().nativeElement, picture.svg, doc.size)
+    this.sheetOpen.set(false);
+    flatten([this.fillRef().nativeElement, this.colourRef().nativeElement], picture.svg, doc.size)
       .then((png) => {
         this.diagnostics.log(`finished: PNG ${megabytes(png.size)} in ${Math.round(performance.now() - t0)} ms`);
         if (this.finishedOpen()) this.finishedPng.set(png);
@@ -465,6 +562,7 @@ export class Colouring {
       { label: 'haptics', value: `${this.haptics().mode} · ${this.lastHapticPulses} pulses last stroke · vibrate ${this.lastVibrate}` },
       { label: 'stroke', value: s ? `${s.tool} by ${s.kind} · ${s.hz ?? '-'} Hz · ${s.samples} samples` : '-' },
       { label: 'pressure', value: s ? `${s.pressureMin.toFixed(2)}–${s.pressureMax.toFixed(2)} (avg ${s.pressureAvg.toFixed(2)})` : '-' },
+      { label: 'fill', value: this.lastFill },
       { label: 'draw', value: s?.drawMsPerEvent != null ? `${s.drawMsPerEvent.toFixed(2)} ms/event` : '-' },
       { label: 'commit', value: `${d.lastCommitMs.toFixed(1)} ms` },
       { label: 'frame', value: `${frames.avg.toFixed(1)} ms avg · ${frames.max.toFixed(0)} ms max` },
@@ -599,6 +697,15 @@ async function deviceLabel(): Promise<string> {
     const m = /(Version|Firefox|Chrome)\/(\d+)/.exec(ua);
     const browser = m ? `${m[1] === 'Version' ? 'Safari' : m[1]} ${m[2]}` : '';
     return [os, browser, kind].filter(Boolean).join(' · ');
+  }
+}
+
+function loadRecents(): string[] {
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]');
+    return Array.isArray(saved) ? saved.filter((c): c is string => typeof c === 'string' && /^#[0-9A-F]{6}$/i.test(c)).slice(0, 8) : [];
+  } catch {
+    return [];
   }
 }
 
