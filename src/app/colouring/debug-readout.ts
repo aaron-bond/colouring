@@ -4,7 +4,7 @@ import { Component, input, model, output, signal } from '@angular/core';
 // from the spike. The gear in the colouring screen's bottom-left corner
 // shows and hides it. Tapping the readout
 // copies a plain-text report to paste back from the tablet. The controls
-// tune the pencil live on the device.
+// tune the pencil and paint brush live on the device.
 
 export interface ReadoutLine {
   label: string;
@@ -16,6 +16,12 @@ export interface PencilTuning {
   opacityMin: number;
   opacityMax: number;
   gamma: number;
+}
+
+export interface PaintTuning {
+  strokeAlpha: number;
+  softness: number;
+  sizeMin: number;
 }
 
 @Component({
@@ -50,6 +56,18 @@ export interface PencilTuning {
           <label>
             Pressure curve {{ tuning().gamma.toFixed(2) }} (lower reaches full sooner)
             <input type="range" min="0.3" max="2" step="0.05" [value]="tuning().gamma" (input)="tune('gamma', $event)" />
+          </label>
+          <label>
+            Paint opacity {{ pct(paint().strokeAlpha) }}
+            <input type="range" min="0.1" max="1" step="0.05" [value]="paint().strokeAlpha" (input)="tunePaint('strokeAlpha', $event)" />
+          </label>
+          <label>
+            Paint edge softness {{ pct(paint().softness) }}
+            <input type="range" min="0" max="1" step="0.05" [value]="paint().softness" (input)="tunePaint('softness', $event)" />
+          </label>
+          <label>
+            Paint width at no pressure {{ pct(paint().sizeMin) }}
+            <input type="range" min="0.1" max="1" step="0.05" [value]="paint().sizeMin" (input)="tunePaint('sizeMin', $event)" />
           </label>
           <button type="button" (click)="clear.emit()">Clear log</button>
         </div>
@@ -136,12 +154,18 @@ export class DebugReadout {
   readonly fingersDraw = model.required<boolean>();
   readonly smoothing = model.required<boolean>();
   readonly tuning = model.required<PencilTuning>();
+  readonly paint = model.required<PaintTuning>();
   readonly copy = output<void>();
   readonly clear = output<void>();
   protected readonly open = signal(false);
 
   protected pct(v: number): string {
     return `${Math.round(v * 100)}%`;
+  }
+
+  protected tunePaint(key: keyof PaintTuning, event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.paint.set({ ...this.paint(), [key]: value });
   }
 
   protected tune(key: keyof PencilTuning, event: Event): void {

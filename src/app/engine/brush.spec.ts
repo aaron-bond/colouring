@@ -1,4 +1,4 @@
-import { ERASER, PENCIL, StrokePlanner, dabAlpha, dabRadius, strokeOpacity } from './brush';
+import { ERASER, PAINT, PENCIL, StrokePlanner, dabAlpha, dabRadius, strokeOpacity } from './brush';
 
 describe('pencil pressure response', () => {
   it('grows in size and opacity with pressure', () => {
@@ -59,5 +59,19 @@ describe('StrokePlanner', () => {
     expect(later[0].radius).toBeGreaterThanOrEqual(first.radius);
     expect(later[0].radius).toBeLessThan(dabRadius(PENCIL, 10, 0.9));
     for (let i = 1; i < later.length; i++) expect(later[i].radius).toBeGreaterThanOrEqual(later[i - 1].radius);
+  });
+});
+
+describe('paint', () => {
+  it('lays opaque dabs, laid down as a whole stroke at its opacity', () => {
+    const dabs = new StrokePlanner(PAINT, 10, { x: 0, y: 0 }, 0.3).to({ x: 100, y: 0 }, 0.3);
+    expect(dabs.every((d) => d.alpha === 1)).toBe(true);
+    expect(PAINT.strokeAlpha).toBeGreaterThan(0.3);
+    expect(PAINT.strokeAlpha).toBeLessThan(0.8);
+  });
+
+  it('is wider than the pencil, and pressure still changes its width', () => {
+    expect(dabRadius(PAINT, 10, 0.6)).toBeGreaterThan(dabRadius(PENCIL, 10, 0.6) * 2);
+    expect(dabRadius(PAINT, 10, 0.2)).toBeLessThan(dabRadius(PAINT, 10, 0.9));
   });
 });

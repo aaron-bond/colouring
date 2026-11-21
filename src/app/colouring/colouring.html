@@ -60,6 +60,13 @@
       <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-5L16 4l4 4L9 19z" /><path d="M14 6l4 4" /></svg>
       <span>Pencil</span>
     </button>
+    <button type="button" class="tool" [class.on]="tool() === 'paint'" [attr.aria-pressed]="tool() === 'paint'" (click)="tool.set('paint')">
+      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M20.5 3.5L12 12" /><path d="M10 10.5l3.5 3.5" />
+        <path d="M9.5 12.5c-2.5-.5-4.5 1-4.8 3.5-.2 1.6-1 2.8-2.2 3.5 3.5 1 7.2 0 8.5-2.6.8-1.6.3-3.6-1.5-4.4z" />
+      </svg>
+      <span>Paint</span>
+    </button>
     <button type="button" class="tool" [class.on]="tool() === 'fill'" [attr.aria-pressed]="tool() === 'fill'" (click)="tool.set('fill')">
       <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M3.5 12.5l7-7 7.5 7.5-7 7z" /><path d="M3.5 12.5h14.5" /><path d="M10.5 5.5L8 3" />
@@ -146,6 +153,7 @@
     (fingersDrawChange)="setFingersDraw($event)"
     [(smoothing)]="smoothing"
     [(tuning)]="tuning"
+    [(paint)]="paintTuning"
     (copy)="copyReport()"
     (clear)="clearLog()"
   />

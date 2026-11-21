@@ -4,7 +4,7 @@
 
 import { Point } from './viewport';
 
-export type BrushId = 'pencil' | 'eraser';
+export type BrushId = 'pencil' | 'paint' | 'eraser';
 
 export interface BrushSpec {
   id: BrushId;
@@ -21,6 +21,14 @@ export interface BrushSpec {
   gamma: number;
   // Multiplies the chosen size (the eraser is wider than the pencil).
   sizeScale: number;
+  // Paint-style strokes: the dabs are opaque and the whole stroke is laid
+  // down at this opacity, so going over a spot within one stroke never
+  // darkens it, but a second stroke does. Unset: dabs build up as they
+  // overlap (the pencil).
+  strokeAlpha?: number;
+  // How much of a dab's radius fades out at its edge: 0 is a hard edge,
+  // 1 fades all the way from the centre.
+  softness?: number;
 }
 
 // Tuned on the OnePlus Pad 3 stylus, which reports pressure from 0.05 to
@@ -37,6 +45,22 @@ export const PENCIL: BrushSpec = {
   sizeScale: 1,
 };
 
+// A simple paint brush: wide, soft-edged and see-through, with even
+// coverage through a stroke. Pressure sets its width only. Watercolour
+// (pigment mixing, darker edges, grain, bleeding) will build on it.
+export const PAINT: BrushSpec = {
+  id: 'paint',
+  erases: false,
+  spacing: 0.12,
+  sizeMin: 0.45,
+  opacityMin: 1,
+  opacityMax: 1,
+  gamma: 1,
+  sizeScale: 2.5,
+  strokeAlpha: 0.55,
+  softness: 0.45,
+};
+
 export const ERASER: BrushSpec = {
   id: 'eraser',
   erases: true,
@@ -48,7 +72,7 @@ export const ERASER: BrushSpec = {
   sizeScale: 2,
 };
 
-export const BRUSHES: Record<BrushId, BrushSpec> = { pencil: PENCIL, eraser: ERASER };
+export const BRUSHES: Record<BrushId, BrushSpec> = { pencil: PENCIL, paint: PAINT, eraser: ERASER };
 
 // Brush diameters as fractions of the document's long side, so the 5
 // presets feel the same at every document size.

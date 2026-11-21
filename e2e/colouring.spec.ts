@@ -294,6 +294,39 @@ test.describe('on the colouring screen', () => {
   });
 });
 
+test.describe('the paint brush', () => {
+  // The highest alpha on the colour layer.
+  const maxAlpha = (page: Page) =>
+    page.locator('canvas.colour').evaluate((c: HTMLCanvasElement) => {
+      const data = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
+      let max = 0;
+      for (let i = 3; i < data.length; i += 4) if (data[i] > max) max = data[i];
+      return max;
+    });
+
+  test('lays even, see-through colour that only deepens with a second stroke', async ({ page }) => {
+    await open(page, 'blank');
+    await page.getByRole('button', { name: 'Paint', exact: true }).click();
+    const [cx, cy] = await pageCentre(page);
+    // Back and forth over the same line in one stroke.
+    await pointer(page, 'pointerdown', 'pen', 1, cx - 100, cy);
+    for (let i = 1; i <= 20; i++) await pointer(page, 'pointermove', 'pen', 1, cx - 100 + i * 10, cy);
+    for (let i = 1; i <= 20; i++) await pointer(page, 'pointermove', 'pen', 1, cx + 100 - i * 10, cy);
+    await pointer(page, 'pointerup', 'pen', 1, cx - 100, cy);
+    // One stroke never goes past the brush's opacity (0.55), however it overlaps.
+    const one = await maxAlpha(page);
+    expect(one).toBeGreaterThan(0.5 * 255);
+    expect(one).toBeLessThan(0.6 * 255);
+    // The wet layer is put back to normal for the next stroke.
+    await expect(page.locator('canvas.wet')).not.toHaveAttribute('style', /opacity/);
+
+    await stroke(page, 'pen', 1, [cx, cy - 100], [cx, cy + 100]);
+    expect(await maxAlpha(page)).toBeGreaterThan(0.75 * 255);
+    await page.getByRole('button', { name: 'Undo' }).click();
+    expect(await maxAlpha(page)).toBe(one);
+  });
+});
+
 test.describe('tap-to-fill', () => {
   test('fills the shape under a tap, behind the pencil, as one undo step', async ({ page }) => {
     await open(page, 'lotus-mandala');

@@ -5,7 +5,7 @@ import { CatalogueService, Picture, documentSize } from '../core/catalogue.servi
 import { flatten } from '../core/export';
 import { DEFAULT_PAINT, PAINTS, Paint, inTin, plateLabel } from '../core/field-guide';
 import { lineArtWalls } from '../core/line-art';
-import { BrushId, ERASER, FIXED_PRESSURE, PENCIL, SIZE_FRACTIONS } from '../engine/brush';
+import { BrushId, ERASER, FIXED_PRESSURE, PAINT, PENCIL, SIZE_FRACTIONS } from '../engine/brush';
 import { withRecent } from '../engine/colour';
 import { Diagnostics, megabytes } from '../engine/diagnostics';
 import { ColourDocument } from '../engine/document';
@@ -14,7 +14,7 @@ import { PointSmoother } from '../engine/smoothing';
 import { Insets, NO_INSETS, Point, Size, View, clampPan, fitView, panBy, pinchView, toDoc, zoomAt } from '../engine/viewport';
 import { Finished } from '../finished/finished';
 import { ColourSheet } from './colour-sheet';
-import { DebugReadout, PencilTuning, ReadoutLine } from './debug-readout';
+import { DebugReadout, PaintTuning, PencilTuning, ReadoutLine } from './debug-readout';
 
 // The colouring screen (TECHNICAL-DESIGN.md 3, 5, 6), in the C1 theme. A
 // thin shell: it turns DOM events into engine calls and keeps the page
@@ -87,6 +87,11 @@ export class Colouring {
     opacityMin: PENCIL.opacityMin,
     opacityMax: PENCIL.opacityMax,
     gamma: PENCIL.gamma,
+  });
+  protected readonly paintTuning = signal<PaintTuning>({
+    strokeAlpha: PAINT.strokeAlpha!,
+    softness: PAINT.softness!,
+    sizeMin: PAINT.sizeMin,
   });
 
   private doc: ColourDocument | null = null;
@@ -280,7 +285,8 @@ export class Colouring {
             break;
           }
           this.smoother = this.smoothing() ? new PointSmoother() : null;
-          const brush = tool === 'eraser' ? ERASER : { ...PENCIL, ...this.tuning() };
+          const brush =
+            tool === 'eraser' ? ERASER : tool === 'paint' ? { ...PAINT, ...this.paintTuning() } : { ...PENCIL, ...this.tuning() };
           const pressure = this.pressureOf(s);
           doc.beginStroke(brush, this.paint().hex, this.sizeIndex(), this.toDocPoint(s), pressure);
           this.diagnostics.strokeStart(s.kind, tool, pressure);
@@ -593,6 +599,7 @@ export class Colouring {
           `tool ${this.tool()} · size ${this.sizeIndex() + 1} · colour ${this.paint().name} ${this.paint().hex}`,
           `fingers draw in pen mode ${this.fingersDraw()} · smoothing ${this.smoothing()}`,
           `pencil: width at no pressure ${t.sizeMin} · opacity ${t.opacityMin}–${t.opacityMax} · curve ${t.gamma}`,
+          `paint: opacity ${this.paintTuning().strokeAlpha} · softness ${this.paintTuning().softness} · width at no pressure ${this.paintTuning().sizeMin}`,
         ],
       ],
       ['Readout now', this.readoutLines().map((l) => `${l.label}: ${l.value}`)],

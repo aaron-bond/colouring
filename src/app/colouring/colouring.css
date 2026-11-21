@@ -506,10 +506,14 @@ svg {
     display: none;
   }
 
-  /* Three tools and five sizes across a phone: icons only (the names stay
+  /* Four tools and five sizes across a phone: icons only (the names stay
      for screen readers). */
   .tool {
-    width: 50px;
+    width: 42px;
+  }
+
+  .tool.on::before {
+    inset: 6px -2px;
   }
 
   .tool span {
@@ -521,8 +525,12 @@ svg {
   }
 
   .size {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .stitch {
+    margin: 0 2px;
   }
 
   .pans {

@@ -47,7 +47,7 @@ dot-to-dot.
 | Zoom/pan | **CSS transform** on document-sized layers | Redrawing a viewport canvas every frame | Viewport renderer, if the spike shows CSS scaling isn't good enough |
 | Line art on screen | **The SVG itself**, overlaid | Rasterised line art | None needed |
 | Fill | **Live scanline flood fill** over a wall mask of our own clean SVGs, on the main thread; fills go behind the pencil | Precomputed region labels in a worker; tolerance and gap closing | Move it to a worker, or precompute labels, if fills feel slow on the device (section 8) |
-| Brushes | **Pencil** (+ Eraser and Fill) | Crayon, Marker, Paint | Add brushes one at a time; the brush spec (7) is built to take more |
+| Brushes | **Pencil and Paint** (+ Eraser and Fill) | Crayon, Marker, Paint | Add brushes one at a time; the brush spec (7) is built to take more |
 
 ## 3. App structure
 
@@ -287,6 +287,7 @@ by brush size, and a "dab" is drawn at each step onto the wet layer.
 | Brush | Dab | Opacity | Pressure → |
 | --- | --- | --- | --- |
 | Pencil | small, grainy | 0.85 | size + opacity |
+| Paint | wide, soft-edged | 0.55 for the whole stroke | size |
 | Eraser | round, `destination-out` | n/a | size |
 
 Later, one at a time: Crayon (round, heavy grain, opaque), Marker
@@ -308,7 +309,17 @@ so adding one is mostly data plus tuning.
   the ends visibly thinner.
 - **Eraser** draws straight onto the colour layer with `destination-out`
   (as the sample does), so it never touches the lines.
-- **The tool roll:** Pencil, Fill and Eraser, plus the size presets
+- **Paint** (2026-11-21) is the simple base for watercolour later. Its
+  dabs are soft-edged stamps drawn opaque, and the whole stroke is laid
+  down at one opacity: going over a spot within a stroke never darkens
+  it, a second stroke does, and colours glaze over each other and over
+  fills. The wet layer shows the stroke at that opacity (CSS opacity);
+  on commit each touched tile is built on a 256 px scratch canvas and
+  composited once (decision 11's note). Opacity, edge softness and
+  width are tunable from the gear. Watercolour then adds pigment-style
+  mixing (blue over yellow gives green), darker drying edges, paper
+  grain and wet-into-wet bleeding.
+- **The tool roll:** Pencil, Paint, Fill and Eraser, plus the size presets
   (dimmed while Fill is chosen, as a fill has no size).
 - **The wet layer stays,** even with only Pencil. Overlapping dabs within
   one stroke would otherwise build up past the pencil's opacity, and the
@@ -641,7 +652,8 @@ first, then the utilities, then more pictures.
 4. **Persistence:** autosave, reopen, thumbnails, "Specimens in
    progress"; Finished becomes its own route with the stamp.
 5. **Colour and tools:** the mixer, more palettes, recent colours; more
-   brushes one at a time. Started 2026-11-20 on request: **tap-to-fill**
+   brushes one at a time. **Paint** added 2026-11-21 (section 7), the
+   base for watercolour. Started 2026-11-20 on request: **tap-to-fill**
    (section 8) and **the colour sheet**: the ＋ on the paint tin opens
    a mixer (shade square and hue strip), the 8 most recent colours used
    that aren't in the tin (kept on the device), and Pastels, Earth,
@@ -662,7 +674,8 @@ After v1, in rough order: more brushes (7), photo → line art (12).
 
 - **More tools, at the very least a watercolour Paint brush.** Already
   planned for milestone 5 (section 7: Crayon, Marker, Paint, one at a
-  time); none is built yet. Watercolour is the hardest of the three:
+  time). A simple Paint brush is built (2026-11-21); watercolour builds
+  on it. Watercolour is the hardest of the three:
   soft edges, pooling at the edges of a stroke, and colour building up
   where strokes overlap. Like Marker, it needs its dabs composited on a
   scratch tile at stroke opacity (decision 11).
@@ -764,3 +777,13 @@ From the owner, 2026-11-20:
     sheet follows `CONTEXT.md` 9 (the ＋ on the dock), but recent
     colours live in the sheet rather than on the tin, so the tin stays
     16 pans wide on a phone.
+
+From the owner, 2026-11-21:
+
+16. **A simple Paint brush first, watercolour later.** What makes paint
+    read as watercolour is the brush's behaviour (transparency, glazing,
+    darker edges, grain, bleeding), not the colours picked, so Paint
+    starts as a soft, see-through brush with even coverage per stroke,
+    and the watercolour effects are added to it step by step. A
+    pigment-style palette may come later as one more palette in the
+    colour sheet.
