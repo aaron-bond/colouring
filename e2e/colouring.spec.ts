@@ -422,29 +422,6 @@ test.describe('the debug readout', () => {
     expect(report).toContain('document 3072×3072');
   });
 
-  test('pen haptics pulse while drawing, and stay off for fingers', async ({ page }) => {
-    await page.addInitScript(() => {
-      const calls: number[] = [];
-      (window as unknown as { vibrateCalls: number[] }).vibrateCalls = calls;
-      navigator.vibrate = (pattern: VibratePattern) => {
-        calls.push(Number(pattern));
-        return true;
-      };
-    });
-    await open(page, 'lotus-mandala');
-    await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();
-    await page.getByRole('button', { name: 'Tuning' }).click();
-    await page.getByRole('radio', { name: 'grain' }).check();
-    const calls = () => page.evaluate(() => (window as unknown as { vibrateCalls: number[] }).vibrateCalls.length);
-
-    const [cx, cy] = await stageCentre(page);
-    await stroke(page, 'touch', 1, [cx - 150, cy - 80], [cx + 150, cy - 80]);
-    expect(await calls()).toBe(0);
-    await stroke(page, 'pen', 2, [cx - 150, cy], [cx + 150, cy]);
-    expect(await calls()).toBeGreaterThan(3);
-    await expect(page.locator('dd', { hasText: /grain · \d+ pulses last stroke · vibrate ok/ })).toBeVisible();
-  });
-
   test('a long diagonal stroke only stores the tiles it crosses', async ({ page }) => {
     await open(page, 'lotus-mandala');
     await page.getByRole('button', { name: 'Diagnostics', exact: true }).click();

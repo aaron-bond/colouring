@@ -658,23 +658,17 @@ test needs them.
 
 After v1, in rough order: more brushes (7), photo → line art (12).
 
-To look into later (owner's idea, 2026-11-19): **haptics while drawing
-with the pen**, a light vibration that makes the stroke feel like pencil
-on paper. To check: whether the web can drive it at all. Chrome on
-Android has `navigator.vibrate()`, but it drives the tablet's own motor,
-needs a recent tap first, and only takes on/off durations, so a paper
-"grain" may feel buzzy rather than textured. A stylus's own haptics
-aren't exposed to the web. A test on the OnePlus would settle it.
-
-**Spike built 2026-11-19** (`engine/haptics.ts`, controls in the gear's
-Tuning panel, off by default): pen strokes only, in two modes. *Grain*
-sends a short pulse every few pixels of pen travel on screen (pulse
-length, spacing and a pressure link are adjustable), and never sends a
-pulse before the last one has finished, since a new `vibrate()` call
-cuts the old one short. *Buzz* runs one vibration while the pen moves
-and stops it 60 ms after the pen rests or lifts. "Test vibration"
-checks the motor answers at all; the report records whether
-`vibrate()` was accepted or refused.
+Tried and dropped (owner's idea, 2026-11-19): **haptics while drawing
+with the pen**, a light vibration to make the stroke feel like pencil
+on paper. The web only offers `navigator.vibrate()`, which drives the
+device's own motor (a stylus's haptics aren't exposed). A spike on
+2026-11-19 tried two feels behind the diagnostics gear: *grain*, a
+short pulse every few pixels of pen travel, and *buzz*, one vibration
+while the pen moved. **On the OnePlus Pad 3 nothing vibrated at all**
+(2026-11-20): the tablet appears to have no vibration motor, so the
+idea can't work on the MVP device. The owner closed it and the spike's
+code was removed (it's in git history: `engine/haptics.ts`, commit
+dde31ba).
 
 ## 16. Decisions
 
