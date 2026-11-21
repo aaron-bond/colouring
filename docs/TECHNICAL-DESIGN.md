@@ -188,9 +188,11 @@ interface Artwork {
 //   thumbnail: small flattened PNG (~320px) for the library
 ```
 
-SVG files are **immutable once shipped**. The version goes in the
-filename, so an artwork always reopens against the exact art it was
-coloured on, and its fills still line up.
+**From v1 (when milestone 4 closes), SVG files are immutable once
+shipped.** The version goes in the filename, so an artwork always
+reopens against the exact art it was coloured on, and its fills still
+line up. Until then nothing is saved and nothing is promised (decision
+17), so art is simply edited in place.
 
 ## 5. The document and its layers
 
@@ -441,6 +443,10 @@ itself is kept. If that matters later, add a stroke log alongside.
 - **Authoring rules:**
   - single-colour line art, minimum line width per difficulty
   - every region closed
+  - anything meant to be coloured is a closed shape with room inside
+    (at least about 3 px clear inside the lines at document size), not
+    a single line: sun rays, rings, poles and antennae included. Single
+    lines are only for marks (veins, faces, birds, grass)
   - no text, images or scripts in the SVG
 - **`scripts/check-pictures.ts`** (run in CI):
   - validates the catalogue
@@ -679,14 +685,12 @@ After v1, in rough order: more brushes (7), photo → line art (12).
   soft edges, pooling at the edges of a stroke, and colour building up
   where strokes overlap. Like Marker, it needs its dabs composited on a
   scratch tile at stroke opacity (decision 11).
-- **Line art that leaves room to colour.** Some details are drawn as a
-  single open line, so there's no shape inside them to colour or fill:
-  the planet's ring in Moon and stars is one curve. The castle's rose
-  window spokes and flag poles are single lines too. The authoring
-  check (section 10) should require such details to be drawn as closed
-  shapes with a minimum inside width. The "sun rays in the sky picture"
-  report doesn't match a current plate (none has a sun); to confirm
-  which picture the testers mean.
+- **Line art that leaves room to colour.** *Done 2026-11-21.* Details
+  drawn as a single line left nothing to colour: the sun's rays (in
+  Tulips, "the sky picture"), the planet's ring (Moon and stars), the
+  castle's flagpoles and the butterfly's antennae. All are closed
+  shapes now (the ring passes behind and in front of the planet), and
+  the authoring rules in section 10 require it.
 - **An eyedropper, and a custom palette the user can save.** Not in the
   plan yet. The eyedropper picks from the flattened page (fill and
   colour layers over paper). A saved palette needs storage, so it fits
@@ -787,3 +791,8 @@ From the owner, 2026-11-21:
     and the watercolour effects are added to it step by step. A
     pigment-style palette may come later as one more palette in the
     colour sheet.
+
+17. **Nothing is promised before v1** (owner, 2026-11-21). v1 is when
+    milestone 4 closes. Until then features and behaviour are in flux:
+    no compatibility with earlier versions, no migrations, and art is
+    edited in place rather than versioned.

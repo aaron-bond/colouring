@@ -357,6 +357,34 @@ test.describe('tap-to-fill', () => {
     expect(await filledPixels(page)).toBe(filled);
   });
 
+  // Details that were once single lines are shapes with room to colour:
+  // a tap fills just the detail, not the sky around it.
+  // [picture, tap x, y, document width, a point the fill must reach]
+  for (const [picture, x, y, docWidth, reach] of [
+    ['tulips', 287, 125, 1536, null], // a sun ray
+    // The planet's ring, which must run on round its end, off the planet.
+    ['moon-and-stars', 1480, 796, 2048, [1583, 736]],
+    ['princess-castle', 768, 230, 1536, null], // the middle flagpole
+    ['butterfly', 922, 380, 2048, null], // an antenna
+  ] as const) {
+    test(`a detail in ${picture} can be filled on its own`, async ({ page }) => {
+      await open(page, picture);
+      await page.getByRole('button', { name: 'Fill', exact: true }).click();
+      const stage = (await page.locator('.stage').boundingBox())!;
+      const box = (await page.locator('.page').boundingBox())!;
+      const k = box.width / docWidth;
+      await tap(page, 'pen', box.x - stage.x + x * k, box.y - stage.y + y * k);
+      await expect.poll(() => filledPixels(page)).toBeGreaterThan(300);
+      expect(await filledPixels(page)).toBeLessThan(20_000);
+      if (reach) {
+        const alpha = await page
+          .locator('canvas.fill')
+          .evaluate((c: HTMLCanvasElement, [px, py]) => c.getContext('2d')!.getImageData(px, py, 1, 1).data[3], reach);
+        expect(alpha).toBe(255);
+      }
+    });
+  }
+
   test('a drag with fill does nothing', async ({ page }) => {
     await open(page, 'lotus-mandala');
     await page.getByRole('button', { name: 'Fill', exact: true }).click();

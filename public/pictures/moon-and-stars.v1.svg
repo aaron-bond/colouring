@@ -19,8 +19,19 @@
     <circle cx="420" cy="520" r="7"/>
     <circle cx="200" cy="530" r="6"/>
     <circle cx="750" cy="200" r="5"/>
-    <circle cx="575" cy="300" r="24"/>
-    <path d="M535,312 C513,326 527,334 575,320 C623,306 641,286 615,288"/>
+        <defs>
+      <mask id="behind-planet" maskUnits="userSpaceOnUse" x="0" y="0" width="800" height="600">
+        <rect width="800" height="600" fill="#fff"/>
+        <circle cx="575" cy="300" r="26" fill="#000"/>
+      </mask>
+      <mask id="behind-ring" maskUnits="userSpaceOnUse" x="0" y="0" width="800" height="600">
+        <rect width="800" height="600" fill="#fff"/>
+        <path transform="translate(575 300) rotate(-16)" d="M-52,0 A52,16 0 0 0 52,0 H38 A38,7 0 0 1 -38,0 Z" fill="#000"/>
+      </mask>
+    </defs>
+    <circle cx="575" cy="300" r="26" mask="url(#behind-ring)"/>
+    <g mask="url(#behind-planet)"><path transform="translate(575 300) rotate(-16)" d="M-52,0 A52,16 0 0 1 52,0 M-38,0 A38,7 0 0 1 38,0"/></g>
+    <path transform="translate(575 300) rotate(-16)" d="M-52,0 A52,16 0 0 0 52,0 M-38,0 A38,7 0 0 0 38,0"/>
     <path d="M300,530 C330,510 360,540 340,560 C326,572 312,556 324,548"/>
   </g>
 </svg>
