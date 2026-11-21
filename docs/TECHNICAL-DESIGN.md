@@ -658,7 +658,33 @@ test needs them.
 
 After v1, in rough order: more brushes (7), photo → line art (12).
 
-Tried and dropped (owner's idea, 2026-11-19): **haptics while drawing
+**Tester requests (2026-11-21), to choose from:**
+
+- **More tools, at the very least a watercolour Paint brush.** Already
+  planned for milestone 5 (section 7: Crayon, Marker, Paint, one at a
+  time); none is built yet. Watercolour is the hardest of the three:
+  soft edges, pooling at the edges of a stroke, and colour building up
+  where strokes overlap. Like Marker, it needs its dabs composited on a
+  scratch tile at stroke opacity (decision 11).
+- **Line art that leaves room to colour.** Some details are drawn as a
+  single open line, so there's no shape inside them to colour or fill:
+  the planet's ring in Moon and stars is one curve. The castle's rose
+  window spokes and flag poles are single lines too. The authoring
+  check (section 10) should require such details to be drawn as closed
+  shapes with a minimum inside width. The "sun rays in the sky picture"
+  report doesn't match a current plate (none has a sun); to confirm
+  which picture the testers mean.
+- **An eyedropper, and a custom palette the user can save.** Not in the
+  plan yet. The eyedropper picks from the flattened page (fill and
+  colour layers over paper). A saved palette needs storage, so it fits
+  with persistence (milestone 4); recent colours are already kept on
+  the device.
+- **Suggested colours that go with the one picked.** Not in the plan
+  yet: complementary, analogous and triadic colours (hue rotations of
+  the current colour, in `engine/colour.ts`), shown in the colour
+  sheet.
+
+
 with the pen**, a light vibration to make the stroke feel like pencil
 on paper. The web only offers `navigator.vibrate()`, which drives the
 device's own motor (a stylus's haptics aren't exposed). A spike on
